@@ -1,0 +1,7 @@
+{ "version": "0.2.0", "configurations": [
+  { "name": "Run / Debug CampusGuard (window)", "type": "cppdbg", "request": "launch",
+    "program": "${workspaceFolder}/build-gui/campusguard_gui", "cwd": "${workspaceFolder}",
+    "MIMode": "lldb", "preLaunchTask": "Build window app" },
+  { "name": "Debug CampusGuard (console)", "type": "cppdbg", "request": "launch",
+    "program": "${workspaceFolder}/build/campusguard", "cwd": "${workspaceFolder}",
+    "MIMode": "lldb", "externalConsole": false, "preLaunchTask": "Build C++ (console)" } ] }

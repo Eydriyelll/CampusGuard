@@ -1,0 +1,5 @@
+---
+triple:          'arm64-apple-darwin'
+binary-path:     '/Users/araos.adriel/Documents/CampusGuard/core/src/main'
+relocations:     []
+...

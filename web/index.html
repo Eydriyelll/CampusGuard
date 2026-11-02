@@ -1,0 +1,184 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#102a24">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="CampusGuard">
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="apple-touch-icon" href="icon-180.png">
+  <title>CampusGuard | Campus safety</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header class="topbar">
+    <a class="brand" href="#" aria-label="CampusGuard home">
+      <span class="brand-mark" aria-hidden="true">CG</span>
+      <span>CampusGuard<small>Rizal Building safety guide</small></span>
+    </a>
+    <span class="topbar-note"><span class="live-dot"></span> Campus route guide</span>
+  </header>
+
+  <main>
+    <section class="intro">
+      <div>
+        <p class="eyebrow">MCL CAMPUS <span>/</span> RIZAL BUILDING</p>
+        <h1>Find your way to safety.</h1>
+        <p class="intro-copy">Choose your floor and room to see a clear route to an exit or the MCL Track Oval.</p>
+      </div>
+      <div class="estimate-note"><span aria-hidden="true">i</span> Demonstration map · distances are estimates</div>
+    </section>
+
+    <nav class="tabs" aria-label="Application sections">
+      <button data-tab="route" class="on">Map &amp; routes</button>
+      <button data-tab="sos">SOS support</button>
+      <button data-tab="status">Safety status</button>
+    </nav>
+
+    <section id="p-route" class="panel">
+      <div class="workspace">
+        <section class="map-card">
+          <div class="section-heading">
+            <div>
+              <p class="eyebrow">FLOOR-BY-FLOOR VIEW</p>
+              <h2>Rizal Building</h2>
+            </div>
+            <span class="map-stamp">SCHEMATIC</span>
+          </div>
+          <div id="floors" class="floors" aria-label="Choose a floor"></div>
+          <div class="map-frame">
+            <svg id="map" viewBox="-8 -8 116 116" role="img" aria-label="Select your location on the campus route map"></svg>
+          </div>
+          <div class="map-foot">
+            <span><i class="sw room"></i>Room</span>
+            <span><i class="sw hall"></i>Hallway</span>
+            <span><i class="sw exit"></i>Exit</span>
+            <span><i class="sw route-key"></i>Suggested route</span>
+            <span><i class="sw hazard-key"></i>Blocked</span>
+          </div>
+          <details class="map-layers">
+            <summary>Map symbols</summary>
+            <div class="legend">
+              <span><i class="sw alarm">!</i>Fire alarm call point</span>
+              <span><i class="sw ext">E</i>Fire extinguisher</span>
+              <span><i class="sw hose">H</i>Fire hose</span>
+              <span><i class="sw ref">R</i>Safe refuge</span>
+              <span><i class="sw fx"></i>Fire exit</span>
+              <label><input type="checkbox" data-layer="1" checked> Alarms</label>
+              <label><input type="checkbox" data-layer="2"> Extinguishers</label>
+              <label><input type="checkbox" data-layer="4" checked> Hoses</label>
+              <label><input type="checkbox" data-layer="8" checked> Safe refuge</label>
+            </div>
+          </details>
+          <p class="map-disclaimer">Illustrative route layout based on the evacuation-plan photos you provided. It is not a surveyed floor plan; follow posted signs and instructions from campus staff in an emergency.</p>
+        </section>
+
+        <aside class="route-tools">
+          <section class="selection-card">
+            <p class="eyebrow">YOUR LOCATION</p>
+            <div id="selInfo" class="selection-value">Choose a room or hallway on the map</div>
+            <p id="hint" class="hint" aria-live="polite">Tap a room to start planning your route.</p>
+          </section>
+
+          <section class="action-card">
+            <p class="eyebrow">PLAN A ROUTE</p>
+            <div class="action-stack">
+              <button id="bOval" class="btn primary"><span>Route to assembly point</span><span aria-hidden="true">→</span></button>
+              <button id="bExit" class="btn"><span>Find nearest fire exit</span><span aria-hidden="true">→</span></button>
+            </div>
+            <div class="facility-grid">
+              <button id="fAlarm" class="btn" title="Find the nearest fire alarm">Fire alarm</button>
+              <button id="fExt" class="btn" title="Find the nearest extinguisher">Extinguisher</button>
+              <button id="fHose" class="btn" title="Find the nearest fire hose">Fire hose</button>
+              <button id="fRef" class="btn" title="Find the nearest safe refuge">Safe refuge</button>
+            </div>
+            <div class="route-result" id="routeCard">
+              <div class="empty-route">Your route and step-by-step directions will appear here.</div>
+            </div>
+          </section>
+
+          <details class="hazard-tools">
+            <summary>Demo controls <span>Block a place or hallway</span></summary>
+            <div class="row">
+              <button id="bHaz" class="btn warn">Block / reopen place</button>
+              <button id="bEdge" class="btn warn">Block / reopen hallway</button>
+            </div>
+          </details>
+
+          <section class="distance-card">
+            <p class="eyebrow">ESTIMATED WALKING DISTANCE</p>
+            <h3>From each floor to the Oval</h3>
+            <div id="ovalTable"></div>
+          </section>
+        </aside>
+      </div>
+    </section>
+
+    <section id="p-sos" class="panel" hidden>
+      <div class="page-heading">
+        <p class="eyebrow">GET HELP</p>
+        <h2>Send an SOS</h2>
+        <p>Choose your location on the map first, then share the details with the campus response team.</p>
+      </div>
+      <div class="sos-layout">
+        <section class="content-card">
+          <div class="form-grid">
+            <label>User ID<input id="uid" value="U1" autocapitalize="off" autocomplete="off"></label>
+            <label>Name<input id="uname" value="Student" autocomplete="off"></label>
+            <label class="form-wide">What do you need help with?
+              <select id="ukind"><option>injury</option><option>trapped</option><option>fire</option><option>medical</option><option>distress</option></select>
+            </label>
+          </div>
+          <p id="sosLoc" class="location-note">Pick your location on the map first.</p>
+          <button id="bSos" class="btn danger wide">Send SOS</button>
+          <div id="sosOut" class="sos-output"></div>
+        </section>
+        <section class="content-card">
+          <p class="eyebrow">RESPONSE TEAM</p>
+          <h3>Dispatch queue</h3>
+          <p class="muted">SOS requests are handled in the order they arrive.</p>
+          <div class="row">
+            <button id="bNext" class="btn">Dispatch next SOS</button>
+            <button id="bCheck" class="btn ok">I am at the Oval</button>
+          </div>
+          <h3>Emergency contacts</h3>
+          <div id="contacts"></div>
+        </section>
+      </div>
+    </section>
+
+    <section id="p-status" class="panel" hidden>
+      <div class="page-heading">
+        <p class="eyebrow">INCIDENT OVERVIEW</p>
+        <h2>Safety status</h2>
+        <p>Review blocked routes, evacuation check-ins, and the campus location hierarchy.</p>
+      </div>
+      <section class="content-card">
+        <div id="chips" class="status-summary"></div>
+        <div class="row status-actions">
+          <button id="bUndo" class="btn">Undo last hazard change</button>
+          <button id="bReport" class="btn primary">Build incident report</button>
+        </div>
+        <div id="reportOut"></div>
+      </section>
+      <section class="content-card tree-card">
+        <p class="eyebrow">LOCATION HIERARCHY</p>
+        <h3>Campus → building → floor → room</h3>
+        <div id="tree" class="tree"></div>
+      </section>
+    </section>
+
+  </main>
+
+  <footer>
+    <span>CampusGuard · Rizal Building</span>
+    <span>For demonstrations and study; follow official campus emergency guidance.</span>
+  </footer>
+  <div id="toast" class="toast" role="status" aria-live="polite"></div>
+  <script src="engine.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>

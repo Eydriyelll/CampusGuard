@@ -1,0 +1,10 @@
+{
+	"InstallScripts" : 
+	[
+		"/Users/araos.adriel/Documents/CampusGuard/build-gui/cmake_install.cmake",
+		"/Users/araos.adriel/Documents/CampusGuard/build-gui/_deps/webview-build/cmake_install.cmake",
+		"/Users/araos.adriel/Documents/CampusGuard/build-gui/_deps/webview-build/compatibility/cmake_install.cmake",
+		"/Users/araos.adriel/Documents/CampusGuard/build-gui/_deps/webview-build/core/cmake_install.cmake"
+	],
+	"Parallel" : false
+}

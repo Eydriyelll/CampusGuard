@@ -1,0 +1,17 @@
+cmake_minimum_required(VERSION 3.16)
+project(CampusGuard CXX)
+set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+
+# Console version (same as build_native.sh)
+add_executable(campusguard core/src/main.cpp)
+target_include_directories(campusguard PRIVATE core/include)
+
+# Desktop window version (downloads the small 'webview' library on first configure)
+include(FetchContent)
+FetchContent_Declare(webview GIT_REPOSITORY https://github.com/webview/webview GIT_TAG 0.12.0)
+FetchContent_MakeAvailable(webview)
+add_executable(campusguard_gui core/src/gui.cpp)
+target_include_directories(campusguard_gui PRIVATE core/include)
+target_compile_definitions(campusguard_gui PRIVATE WEB_DIR="${CMAKE_SOURCE_DIR}/web")
+target_link_libraries(campusguard_gui PRIVATE webview::core)

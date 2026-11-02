@@ -1,0 +1,12 @@
+/Users/araos.adriel/Documents/CampusGuard/build-gui/CMakeFiles/campusguard.dir
+/Users/araos.adriel/Documents/CampusGuard/build-gui/CMakeFiles/campusguard_gui.dir
+/Users/araos.adriel/Documents/CampusGuard/build-gui/CMakeFiles/edit_cache.dir
+/Users/araos.adriel/Documents/CampusGuard/build-gui/CMakeFiles/rebuild_cache.dir
+/Users/araos.adriel/Documents/CampusGuard/build-gui/_deps/webview-build/CMakeFiles/edit_cache.dir
+/Users/araos.adriel/Documents/CampusGuard/build-gui/_deps/webview-build/CMakeFiles/rebuild_cache.dir
+/Users/araos.adriel/Documents/CampusGuard/build-gui/_deps/webview-build/compatibility/CMakeFiles/edit_cache.dir
+/Users/araos.adriel/Documents/CampusGuard/build-gui/_deps/webview-build/compatibility/CMakeFiles/rebuild_cache.dir
+/Users/araos.adriel/Documents/CampusGuard/build-gui/_deps/webview-build/core/CMakeFiles/webview_core_shared.dir
+/Users/araos.adriel/Documents/CampusGuard/build-gui/_deps/webview-build/core/CMakeFiles/webview_core_static.dir
+/Users/araos.adriel/Documents/CampusGuard/build-gui/_deps/webview-build/core/CMakeFiles/edit_cache.dir
+/Users/araos.adriel/Documents/CampusGuard/build-gui/_deps/webview-build/core/CMakeFiles/rebuild_cache.dir
