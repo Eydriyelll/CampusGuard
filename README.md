@@ -1,37 +1,52 @@
-# CampusGuard - Phone + Mac + Windows
+# CampusGuard
 
-One C++ engine (core/include/*.hpp), three app shells.
+CampusGuard helps people find evacuation routes in Rizal Building and sends SOS requests to
+the MCL Track Oval. The routing engine is C++; the desktop webview and phone app share the
+polished interface in `web/`.
 
-| Platform | App | How |
-|---|---|---|
-| Mac | native window (Cocoa) | `./build_app_mac.sh`  -> CampusGuard.app |
-| Windows | native window (WebView2) | `build_windows.bat` in "x64 Native Tools Command Prompt for VS" -> CampusGuard.exe |
-| iPhone + Android | home-screen app, works offline | host the `web/` folder over HTTPS, then Add to Home Screen / Install |
-| Console demo | terminal | `clang++ -std=c++17 -Icore/include core/src/main.cpp -o campusguard && ./campusguard` then `demo` |
+## Project map
 
-## Find the code quickly
+```text
+core/
+  include/       C++ structures and algorithms used by the app
+  lessons/       Small examples for the rest of the DSA curriculum
+  src/           App and console entry points
+web/             Shared desktop and phone interface
+```
 
-Start with `core/src/main.cpp` for the console, `core/src/gui.cpp` for the desktop window,
-and `web/index.html` / `web/app.js` for the interface. The engine is kept in small headers:
+### Find a feature or lesson
 
-| Lesson or feature | File to open | What to look for |
-|---|---|---|
-| Singly linked list | `core/include/ds.hpp` | `LinkedList<T>` |
-| Doubly linked list | `core/include/ds.hpp` | `DoublyLinkedList<T>`; used for the people registry in `Campus.hpp` |
-| Stack and queue | `core/include/ds.hpp` | `Stack<T>` and `Queue<T>` |
-| Campus hierarchy tree | `core/include/Tree.hpp` | `TreeNode` |
-| Graph, BFS routes, DFS cut-off check | `core/include/Graph.hpp` | `Graph`, `bfs()`, and `cutOff()` |
-| Merge sort and binary search | `core/include/Algorithms.hpp` | `mergeSort()` and `binarySearch()` |
-| Campus rooms and application commands | `core/include/Campus.hpp` | `buildRizal()` and `exec()` |
-| Phone/browser engine | `web/engine.js` | JavaScript mirror of the C++ engine |
+| If you want to explain... | Open this file |
+|---|---|
+| People list, stack, or SOS queue | `core/include/ds.hpp` |
+| Campus → building → floor → room tree | `core/include/Tree.hpp` |
+| Campus graph, BFS routes, or DFS cut-off check | `core/include/Graph.hpp` |
+| Merge sort or binary search | `core/include/Algorithms.hpp` |
+| Room layout, distances, or app commands | `core/include/Campus.hpp` |
+| Binary tree, BST, AVL tree, heap, or trie | `core/lessons/trees.hpp` |
+| Circular linked list | `core/lessons/linked_lists.hpp` |
+| Dijkstra shortest path | `core/lessons/shortest_path.hpp` |
+| Full DSA lesson index | `core/lessons/README.md` |
+| Screen layout, styling, or interactions | `web/index.html`, `web/style.css`, `web/app.js` |
 
-The app's **DSA lessons** tab shows code paths and line numbers. Planned topics are listed
-separately in `core/lessons/README.md`; they are not described as working features.
+In VS Code, use **Go to Symbol** or search for the class/function name in the lesson index.
+The lesson examples stay out of the app UI and are clearly labeled when they are not used by
+the evacuation workflows.
 
 ## Build and run
 
-On macOS, run `./build_native.sh` for the console or `./build_app_mac.sh` for the app window.
-To preview the web version locally, run `./serve.sh` and open its printed address.
+The project uses CMake to configure builds; generated Makefiles are build instructions, not
+the app's source code. For a direct C++ build without CMake:
+
+```sh
+./build_native.sh              # build the console app
+./build/campusguard            # run it; type "demo" for the walkthrough
+./build_native.sh --lessons    # build and check the standalone DSA examples
+```
+
+On macOS, `./build_app_mac.sh` builds and opens the desktop app. On Windows, run
+`build_windows.bat` in the Visual Studio C++ tools prompt. To preview the phone/web app, run
+`./serve.sh` and open its printed address.
 
 ## Phone app (iPhone + Android)
 1. Put the `web/` folder online with HTTPS (free): drag it onto https://app.netlify.com/drop  (or use GitHub Pages).
@@ -41,12 +56,12 @@ To preview the web version locally, run `./serve.sh` and open its printed addres
 Quick Wi-Fi test without hosting: `./serve.sh` (Mac) or `serve.bat` (Windows), open the printed address on the phone.
 (Home-screen install + offline needs HTTPS; plain http only works as a normal page.)
 
-## Notes
-- Real room numbers come from the evacuation-plan photos (2F-5F). The ground-floor plan had no room labels, so floor 1 uses placeholders (R1S1.., R1N1..).
-  Edit the room tables in `buildRizal()` (`Campus.hpp`) and `engine.js`.
-- Legend items implemented: Fire Alarm Call Point, Fire Extinguisher, Fire Hose, Safe Refuge, Assembly Point (the Oval), Fire Exit,
-  Escape Routes + Escape Direction (green route with arrows). Plus the emergency contacts and fire steps printed on the plans.
-- The phone app uses engine.js, a JavaScript mirror of the C++ engine (tested identical on 73 commands).
-  Mac and Windows apps run the real C++ engine.
-- The displayed floor layouts and distances are approximate teaching schematics based on the posted evacuation plans, not surveyed emergency directions.
-  Follow official signs and campus staff. Tune the distance constants near the top of `Campus.hpp` and `engine.js`.
+## Map notes
+
+The room numbers on floors 2–5 come from the provided evacuation plans. The ground-floor
+plan has no room labels, so its room names are placeholders (`R1S1`–`R1N5`). The layout and
+distances are approximate teaching schematics, not surveyed emergency directions. Follow
+posted signs and campus staff. Tune distances in `core/include/Campus.hpp` and `web/engine.js`.
+
+The phone app uses `web/engine.js`, a JavaScript mirror of the C++ engine. The Mac and Windows
+desktop apps use the C++ engine.
