@@ -105,7 +105,13 @@ h1, h2, h3, p { margin-top: 0; }
 .selection-card .eyebrow, .action-card .eyebrow, .distance-card .eyebrow { margin-bottom: 5px; }
 .selection-value { font-size: 15px; font-weight: 750; }
 .hint { min-height: 17px; margin: 4px 0 0; color: var(--muted); font-size: 11px; }
+.recent-heading { margin-top: 15px; }
+.location-suggestions, .recent-locations { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 7px; }
+.location-suggestions:empty, .recent-locations:empty { display: none; }
+.location-suggestions .btn, .recent-locations .btn { min-height: 31px; padding: 6px 9px; font-size: 10px; }
+.recent-locations + .btn { margin-top: 8px; }
 .action-card h3, .distance-card h3 { margin: 0 0 10px; font-size: 15px; }
+.action-card > label { margin: 10px 0; }
 .action-stack { display: grid; gap: 8px; }
 .btn { display: inline-flex; min-height: 40px; align-items: center; justify-content: center; gap: 8px; padding: 9px 12px; border: 1px solid var(--line); border-radius: 8px; background: #fff; color: #34443b; cursor: pointer; font-size: 12px; font-weight: 750; transition: background .15s, border-color .15s, transform .15s; }
 .btn:hover:not(:disabled) { border-color: #9cafa2; background: #f7faf7; }
@@ -123,6 +129,10 @@ h1, h2, h3, p { margin-top: 0; }
 .route-result { margin-top: 12px; }
 .empty-route { padding: 12px; border: 1px dashed #d5dfd7; border-radius: 8px; color: var(--muted); font-size: 11px; }
 .route-result .card { padding: 13px; border: 1px solid #d8e8dc; border-radius: 9px; background: #f7fbf7; }
+.route-options { display: grid; gap: 6px; margin: 8px 0 0; padding: 0; list-style: none; }
+.route-options li { display: flex; justify-content: space-between; gap: 10px; padding: 7px 0; border-top: 1px solid var(--line); font-size: 11px; }
+.route-options li span { flex: 1; }
+.route-options .btn { min-height: 30px; padding: 5px 8px; font-size: 10px; }
 .muted { color: var(--muted); }
 .big { margin: 3px 0; color: var(--green-dark); font-size: 25px; font-weight: 850; letter-spacing: -.04em; }
 .steps { max-height: 180px; margin: 10px 0 0; padding-left: 20px; overflow: auto; font-size: 11px; }

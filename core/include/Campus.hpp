@@ -10,9 +10,13 @@
 //   * Legend items are node tags: Fire Alarm Call Point, Extinguisher, Hose, Safe Refuge, Fire Exit.
 //   * Distances are APPROXIMATE (estimated from the plan drawings) - tune the constants to the real building.
 #pragma once
+#include <algorithm>
+#include <cctype>
 #include <cstdlib>
 #include <sstream>
 #include <string>
+#include <unordered_map>
+#include <unordered_set>
 #include <vector>
 #include "Algorithms.hpp"
 #include "Graph.hpp"
@@ -22,7 +26,12 @@
 struct Person { std::string id, name; int node; bool in = false; };
 struct Sos { int ticket; std::string user; int node; std::string kind; };
 struct HazardAct { int a, b; bool before; };            // b == -1 -> node hazard, otherwise edge a-b
-struct Ranked { int idx, meters, steps; };
+struct Ranked {
+    int idx, meters;
+    bool operator<(const Ranked& other) const {
+        return meters == other.meters ? idx < other.idx : meters < other.meters;
+    }
+};
 struct RouteInfo { std::vector<int> path; int meters = 0, toExit = 0; std::string exit; };
 
 class Campus {
@@ -39,7 +48,13 @@ class Campus {
 
     Graph g; TreeNode root{"Campus"}; TreeNode* floorNode[FLOORS + 1] = {};
     DoublyLinkedList<Person> people; Queue<Sos> sosQ; Stack<HazardAct> hist;
+    CircularList<std::string> recent;
     std::vector<std::pair<std::string, int>> byId;   // sorted index for binary search
+    AvlIndex dynamicById;
+    BinarySearchTree<std::string> nameTree;
+    std::unordered_map<std::string, int> nameLookup;
+    Trie locationTrie;
+    size_t baseNodeCount = 0;
     int ticket = 0, handled = 0, hazardEvents = 0;
 
     static std::string esc(const std::string& s) {
@@ -48,6 +63,10 @@ class Campus {
     static std::string Q(const std::string& s) { return "\"" + esc(s) + "\""; }
     static std::string err(const std::string& m) { return "{\"ok\":false,\"msg\":" + Q(m) + "}"; }
     static std::string unus(std::string s) { for (char& c : s) if (c == '_') c = ' '; return s; }   // NAME_WITH_SPACES
+    static std::string lower(std::string s) {
+        for (char& c : s) c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+        return s;
+    }
     static bool toInt(const std::string& s, int& out) {
         char* end = nullptr; long v = std::strtol(s.c_str(), &end, 10);
         if (s.empty() || *end) return false;
@@ -56,17 +75,36 @@ class Campus {
 
     void rebuildIndex() {                                  // MERGE SORT feeds BINARY SEARCH
         byId.clear();
-        for (size_t i = 0; i < g.nodes.size(); ++i) if (g.nodes[i].active) byId.push_back({g.nodes[i].id, (int)i});
+        dynamicById.clear();
+        nameTree.root.reset();
+        nameLookup.clear();
+        locationTrie.clear();
+        for (size_t i = 0; i < g.nodes.size(); ++i) {
+            const MapNode& node = g.nodes[i];
+            if (!node.active) continue;
+
+            if (i < baseNodeCount) byId.push_back({node.id, static_cast<int>(i)});
+            else dynamicById.insert(node.id, static_cast<int>(i));
+
+            const std::string name = lower(node.name);
+            nameTree.insert(name);
+            nameLookup.emplace(name, static_cast<int>(i));
+            locationTrie.insert(lower(node.id), static_cast<int>(i));
+            locationTrie.insert(name, static_cast<int>(i));
+        }
         mergeSort(byId, [](const std::pair<std::string, int>& a, const std::pair<std::string, int>& b) { return a.first < b.first; });
     }
     int idx(const std::string& id) const {
         int p = binarySearch(byId, id, [](const std::pair<std::string, int>& x) { return x.first; });
-        return p < 0 ? -1 : byId[p].second;
+        return p < 0 ? dynamicById.find(id) : byId[p].second;
     }
 
-    RouteInfo plan(int from, Kind k) const { return planIf(from, [&](int i) { return g.nodes[i].kind == k; }); }
-    template <class F> RouteInfo planIf(int from, F goal) const {   // BFS to the nearest node satisfying goal()
-        RouteInfo r; r.path = g.bfs(from, goal);
+    RouteInfo plan(int from, Kind k, bool shortestDistance = false) const {
+        return planIf(from, [&](int i) { return g.nodes[i].kind == k; }, shortestDistance);
+    }
+    template <class F> RouteInfo planIf(int from, F goal, bool shortestDistance = false) const {
+        RouteInfo r;
+        r.path = shortestDistance ? g.dijkstra(from, goal) : g.bfs(from, goal);
         bool pastExit = false;
         for (size_t i = 0; i < r.path.size(); ++i) {
             if (i) { int m = g.meters(r.path[i - 1], r.path[i]); r.meters += m; if (!pastExit) r.toExit += m; }
@@ -82,7 +120,9 @@ class Campus {
                ",\"steps\":" + std::to_string(r.path.size() - 1) + ",\"exit\":" + Q(r.exit) +
                ",\"toExit\":" + std::to_string(r.toExit) + ",\"toOval\":" + std::to_string(r.meters - r.toExit) + "}";
     }
-    std::string nearest(int from, Kind k) const { return pathJson(plan(from, k)); }
+    std::string nearest(int from, Kind k, bool shortestDistance = false) const {
+        return pathJson(plan(from, k, shortestDistance));
+    }
 
     std::string mapJson() const {
         std::string s = "{\"nodes\":[", e = "],\"edges\":[", sep;
@@ -192,7 +232,7 @@ class Campus {
     }
 
 public:
-    Campus() { buildRizal(); rebuildIndex(); buildTree(); }
+    Campus() { buildRizal(); baseNodeCount = g.nodes.size(); rebuildIndex(); buildTree(); }
 
     std::string exec(const std::string& line) {
         std::istringstream in(line); std::vector<std::string> t; std::string w; while (in >> w) t.push_back(w);
@@ -202,17 +242,70 @@ public:
 
         if (c == "map") return mapJson();
         if (c == "tree") return root.json();
-        if (c == "search") { int i = idx(a); if (i < 0) return err("Not found"); auto& n = g.nodes[i];
+        if (c == "search") {
+            int i = idx(a);
+            if (i < 0) {
+                const std::string name = lower(unus(a));
+                if (nameTree.contains(name)) {
+                    auto match = nameLookup.find(name);
+                    if (match != nameLookup.end()) i = match->second;
+                }
+            }
+            if (i < 0) return err("Not found");
+            auto& n = g.nodes[i];
             return "{\"ok\":true,\"id\":" + Q(n.id) + ",\"name\":" + Q(n.name) + ",\"kind\":" + std::to_string((int)n.kind) + ",\"floor\":" + std::to_string(n.floor) + "}"; }
-        if (c == "route") { int i = idx(a); if (i < 0) return err("Unknown location"); return nearest(i, b == "center" ? Kind::Center : Kind::Exit); }
+        if (c == "suggest") {
+            const std::string prefix = lower(unus(a));
+            if (prefix.empty()) return err("Enter part of a room name or ID");
+            std::string result = "[", separator;
+            std::unordered_set<int> added;
+            for (int i : locationTrie.prefix(prefix)) {
+                if (!added.insert(i).second || !g.nodes[i].active) continue;
+                const MapNode& node = g.nodes[i];
+                result += separator + "{\"id\":" + Q(node.id) + ",\"name\":" + Q(node.name) + "}";
+                separator = ",";
+            }
+            return result + "]";
+        }
+        if (c == "remember") {
+            const int i = idx(a);
+            if (i < 0) return err("Unknown location");
+            recent.add(g.nodes[i].id);
+            return "{\"ok\":true,\"msg\":\"Location saved\"}";
+        }
+        if (c == "recent") {
+            std::string result = "[", separator;
+            for (const std::string& id : recent.values()) {
+                result += separator + Q(id);
+                separator = ",";
+            }
+            return result + "]";
+        }
+        if (c == "nextrecent") {
+            const std::string* id = recent.next();
+            if (!id) return err("No recently selected locations");
+            const int i = idx(*id);
+            if (i < 0) return err("Recently selected location is no longer available");
+            return "{\"ok\":true,\"id\":" + Q(*id) + ",\"name\":" + Q(g.nodes[i].name) + "}";
+        }
+        if (c == "route") {
+            int i = idx(a); if (i < 0) return err("Unknown location");
+            if (b == "to") {
+                const int destination = idx(d);
+                if (destination < 0) return err("Unknown destination");
+                return pathJson(planIf(i, [&](int node) { return node == destination; }, true));
+            }
+            return nearest(i, b == "center" ? Kind::Center : Kind::Exit, d == "distance");
+        }
 
         if (c == "find") {                                     // find <ID> alarm|extinguisher|hose|refuge|exit|center
             int i = idx(a); if (i < 0) return err("Unknown location");
-            if (b == "exit") return nearest(i, Kind::Exit);
-            if (b == "center") return nearest(i, Kind::Center);
+            const bool shortestDistance = d == "distance";
+            if (b == "exit") return nearest(i, Kind::Exit, shortestDistance);
+            if (b == "center") return nearest(i, Kind::Center, shortestDistance);
             int bit = b == "alarm" ? TAG_FACP : b == "extinguisher" ? TAG_FE : b == "hose" ? TAG_HOSE : b == "refuge" ? TAG_REFUGE : 0;
             if (!bit) return err("Usage: find ID alarm|extinguisher|hose|refuge|exit|center");
-            return pathJson(planIf(i, [&](int x) { return (g.nodes[x].tags & bit) != 0; })); }
+            return pathJson(planIf(i, [&](int x) { return (g.nodes[x].tags & bit) != 0; }, shortestDistance)); }
         if (c == "contacts")                                    // numbers + steps printed on every evacuation plan
             return "{\"ok\":true,\"contacts\":[{\"name\":\"MCL Security Office\",\"number\":\"local 4099\"},"
                    "{\"name\":\"Cabuyao PNP\",\"number\":\"(049) 502 6535 / 0927 952 2360\"},"
@@ -235,15 +328,18 @@ public:
             }
             return s + "]"; }
 
-        if (c == "ranked") {                                   // every exit/center, merge-sorted by distance
+        if (c == "ranked") {                                   // every exit/center, shortest distance first
             int from = idx(a); if (from < 0) return err("Unknown location");
-            std::vector<Ranked> r;
+            MaxHeap<Ranked> ranked;
             for (size_t i = 0; i < g.nodes.size(); ++i)
-                if (g.nodes[i].active && (g.nodes[i].kind == Kind::Exit || g.nodes[i].kind == Kind::Center)) {
-                    auto p = g.bfs(from, [&](int x) { return x == (int)i; }); if (p.empty()) continue;
+                if (g.nodes[i].active && !g.nodes[i].blocked &&
+                    (g.nodes[i].kind == Kind::Exit || g.nodes[i].kind == Kind::Center)) {
+                    auto p = g.dijkstra(from, [&](int x) { return x == static_cast<int>(i); }); if (p.empty()) continue;
                     int m = 0; for (size_t k = 1; k < p.size(); ++k) m += g.meters(p[k - 1], p[k]);
-                    r.push_back({(int)i, m, (int)p.size() - 1}); }
-            mergeSort(r, [](const Ranked& x, const Ranked& y) { return x.meters < y.meters; });
+                    ranked.push({static_cast<int>(i), m}); }
+            std::vector<Ranked> r;
+            while (!ranked.empty()) r.push_back(ranked.pop());
+            std::reverse(r.begin(), r.end());
             std::string s = "[", sep; for (auto& x : r) { s += sep + "{\"id\":" + Q(g.nodes[x.idx].id) + ",\"meters\":" + std::to_string(x.meters) + "}"; sep = ","; }
             return s + "]"; }
 
@@ -270,7 +366,8 @@ public:
             Person* p = people.find([&](const Person& x) { return x.id == a; });
             if (p) p->node = i; else people.add({a, unus(b), i, false});
             sosQ.enqueue({++ticket, a, i, e.empty() ? "distress" : e});
-            return "{\"ok\":true,\"ticket\":" + std::to_string(ticket) + ",\"queue\":" + std::to_string(sosQ.size()) + ",\"route\":" + nearest(i, Kind::Center) + "}"; }
+            return "{\"ok\":true,\"ticket\":" + std::to_string(ticket) + ",\"queue\":" + std::to_string(sosQ.size()) + ",\"route\":" +
+                   nearest(i, Kind::Center, f5 == "distance") + "}"; }
         if (c == "next") { if (sosQ.empty()) return err("Dispatch queue is empty"); Sos s = sosQ.dequeue(); ++handled;
             return "{\"ok\":true,\"ticket\":" + std::to_string(s.ticket) + ",\"user\":" + Q(s.user) + ",\"at\":" + Q(g.nodes[s.node].id) + ",\"kind\":" + Q(s.kind) + "}"; }
         if (c == "checkin") { Person* p = people.find([&](const Person& x) { return x.id == a; });

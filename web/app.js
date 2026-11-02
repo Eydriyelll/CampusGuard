@@ -2,7 +2,7 @@
 (function () {
   const $ = id => document.getElementById(id);
   const KIND = ['room', 'hall', 'exit', 'center'];
-  let MAP = null, ST = { blocked: [], blockedEdges: [], cutoff: [], unaccounted: [], queue: 0 }, floor = 1, sel = null, route = null, edgeFrom = null, lastKind = null, JS = null, layers = 1 | 4 | 8;
+  let MAP = null, ST = { blocked: [], blockedEdges: [], cutoff: [], unaccounted: [], queue: 0 }, floor = 1, sel = null, route = null, edgeFrom = null, lastKind = null, JS = null, layers = 1 | 4 | 8, searchTimer = null;
   const idIdx = {};
   const TITLE = { exit: 'Nearest fire exit', center: 'Route to the Oval (assembly point)', alarm: 'Nearest Fire Alarm Call Point', extinguisher: 'Nearest fire extinguisher', hose: 'Nearest fire hose', refuge: 'Nearest Safe Refuge' };
   async function cg(cmd) {
@@ -94,28 +94,59 @@
     const has = sel !== null, n = has ? MAP.nodes[sel] : null;
     $('selInfo').innerHTML = has ? `<b>${esc(n.name)}</b> <span class="muted">(${esc(n.id)}, ${n.f === 0 ? 'outdoors' : 'floor ' + n.f})</span>` : 'Nothing selected';
     $('sosLoc').textContent = has ? 'Your location: ' + n.name + ' (' + n.id + ')' : 'Pick your location on the map first.';
-    ['bExit', 'bOval', 'bHaz', 'bEdge', 'bSos', 'fAlarm', 'fExt', 'fHose', 'fRef'].forEach(id => $(id).disabled = !has);
+    ['bExit', 'bOval', 'bRanked', 'bHaz', 'bEdge', 'bSos', 'fAlarm', 'fExt', 'fHose', 'fRef'].forEach(id => $(id).disabled = !has);
   }
-  async function pick(i) {
+  async function pick(i, remember = true) {
     if (edgeFrom !== null) {
       const a = MAP.nodes[edgeFrom].id, b = MAP.nodes[i].id; edgeFrom = null; $('hint').textContent = '';
       const r = await cg(`hazard ${a} ${b}`); toast(r.ok === false ? r.msg : `Hallway ${a}-${b} toggled`);
       return refreshAll();
     }
     sel = i; updateSel(); render();
+    if (remember) {
+      await cg('remember ' + MAP.nodes[i].id);
+      await loadRecent();
+    }
   }
   function showRoute(r) {
     route = r && r.ok ? r : null;
     if (!route) { $('routeCard').innerHTML = `<div class="card"><b>No route.</b> ${esc((r && r.msg) || '')}</div>`; render(); return; }
     const steps = route.path.map((id, k) => { const n = node(id); return `<li>${esc(route.names[k])}<span class="fl">${n.f === 0 ? 'outside' : 'F' + n.f}</span></li>`; }).join('');
+    const preference = $('routeMode').value === 'distance' ? 'shortest estimated distance' : 'fewest hallway connections';
     const detail = (lastKind === 'exit' || lastKind === 'center') ? `${route.steps} steps &bull; to exit ${route.toExit} m (${esc(route.exit)})` + (route.toOval ? ` &bull; exit &rarr; Oval ${route.toOval} m` : '') : `${route.steps} steps`;
-    $('routeCard').innerHTML = `<div class="card"><div class="muted">${esc(TITLE[lastKind] || 'Route')}</div><div class="big">${route.meters} m</div><div class="muted">${detail}</div><ol class="steps">${steps}</ol></div>`;
+    $('routeCard').innerHTML = `<div class="card"><div class="muted">${esc(TITLE[lastKind] || 'Route')} · ${preference}</div><div class="big">${route.meters} m</div><div class="muted">${detail}</div><ol class="steps">${steps}</ol></div>`;
     const start = node(route.path[0]); if (start && start.f !== floor && start.f > 0) floor = start.f;
     render();
   }
-  async function go(kind) { lastKind = kind; showRoute(await cg(`find ${MAP.nodes[sel].id} ${kind}`)); }
+  async function go(kind) {
+    lastKind = kind;
+    const mode = $('routeMode').value === 'distance' ? 'distance' : 'connections';
+    showRoute(await cg(`find ${MAP.nodes[sel].id} ${kind} ${mode}`));
+  }
 
   async function loadMap() { MAP = await cg('map'); Object.keys(idIdx).forEach(k => delete idIdx[k]); MAP.nodes.forEach((n, i) => { if (n) idIdx[n.id] = i; }); }
+  async function loadRecent() {
+    const ids = await cg('recent');
+    $('recentLocations').innerHTML = Array.isArray(ids) ? ids.filter(id => idIdx[id] !== undefined).map(id => {
+      const n = node(id); return `<button class="btn" data-location="${esc(id)}">${esc(n.name)}</button>`;
+    }).join('') : '';
+  }
+  async function loadSuggestions() {
+    const query = $('locationSearch').value.trim().replace(/\s+/g, '_');
+    if (!query) { $('locationSuggestions').innerHTML = ''; return; }
+    const results = await cg('suggest ' + query);
+    $('locationSuggestions').innerHTML = Array.isArray(results) ? results.map(item =>
+      `<button class="btn" data-location="${esc(item.id)}">${esc(item.name)} <span class="muted">${esc(item.id)}</span></button>`
+    ).join('') : '';
+  }
+  async function loadRanked() {
+    if (sel === null) return;
+    const results = await cg('ranked ' + MAP.nodes[sel].id);
+    if (!Array.isArray(results)) { $('rankedRoutes').innerHTML = `<div class="card">${esc(results.msg || 'Could not compare routes.')}</div>`; return; }
+    $('rankedRoutes').innerHTML = `<div class="card"><b>Routes by estimated walking distance</b><ul class="route-options">${
+      results.map(item => `<li><span>${esc(node(item.id).name)}</span><b>${item.meters} m</b><button class="btn" data-destination="${esc(item.id)}">View route</button></li>`).join('')
+    }</ul></div>`;
+  }
   async function loadStatus() {
     ST = await cg('status'); const nb = ST.blocked.length + ST.blockedEdges.length;
     let h = `<span class="chip ${nb ? 'bad' : 'ok'}">Blocked: ${nb}</span><span class="chip ${ST.cutoff.length ? 'warn' : 'ok'}">Cut off: ${ST.cutoff.length}</span>` +
@@ -144,6 +175,7 @@
   }
   async function refreshAll() {
     await loadMap(); await loadStatus(); await loadOval();
+    await loadRecent();
     if (sel !== null && !MAP.nodes[sel]) sel = null;
     if (sel !== null && route && lastKind) await go(lastKind);
     updateSel(); render();
@@ -151,6 +183,39 @@
 
   function wire() {
     $('map').onclick = e => { const g = e.target.closest('[data-i]'); if (g) pick(+g.dataset.i); };
+    $('locationSearch').oninput = () => {
+      clearTimeout(searchTimer);
+      searchTimer = setTimeout(loadSuggestions, 140);
+    };
+    $('locationSearch').onkeydown = e => {
+      if (e.key !== 'Enter') return;
+      const first = $('locationSuggestions').querySelector('[data-location]');
+      if (first) { e.preventDefault(); pick(idIdx[first.dataset.location]); }
+    };
+    $('locationSuggestions').onclick = e => {
+      const button = e.target.closest('[data-location]');
+      if (button) pick(idIdx[button.dataset.location]);
+    };
+    $('recentLocations').onclick = e => {
+      const button = e.target.closest('[data-location]');
+      if (button) pick(idIdx[button.dataset.location]);
+    };
+    $('rankedRoutes').onclick = async e => {
+      const button = e.target.closest('[data-destination]');
+      if (!button || sel === null) return;
+      const result = await cg(`route ${MAP.nodes[sel].id} to ${button.dataset.destination}`);
+      if (result.ok === false) return toast(result.msg);
+      $('routeMode').value = 'distance';
+      lastKind = node(button.dataset.destination).k === 3 ? 'center' : 'exit';
+      showRoute(result);
+    };
+    $('bNextRecent').onclick = async () => {
+      const result = await cg('nextrecent');
+      if (result.ok === false) return toast(result.msg);
+      const index = idIdx[result.id];
+      if (index === undefined) return toast('That location is no longer available.');
+      pick(index, false);
+    };
     document.querySelectorAll('.tabs button').forEach(b => b.onclick = () => {
       document.querySelectorAll('.tabs button').forEach(x => x.classList.toggle('on', x === b));
       ['route', 'sos', 'status'].forEach(t => $('p-' + t).hidden = (t !== b.dataset.tab));
@@ -158,6 +223,8 @@
     });
     $('bExit').onclick = () => go('exit');
     $('bOval').onclick = () => go('center');
+    $('bRanked').onclick = loadRanked;
+    $('routeMode').onchange = () => { if (sel !== null && lastKind) go(lastKind); };
     $('fAlarm').onclick = () => go('alarm'); $('fExt').onclick = () => go('extinguisher'); $('fHose').onclick = () => go('hose'); $('fRef').onclick = () => go('refuge');
     document.querySelectorAll('[data-layer]').forEach(cb => cb.onchange = () => { const v = +cb.dataset.layer; layers = cb.checked ? (layers | v) : (layers & ~v); render(); });
     $('bHaz').onclick = async () => { const id = MAP.nodes[sel].id, r = await cg('hazard ' + id); if (r.ok === false) return toast(r.msg);
@@ -166,7 +233,7 @@
     $('bUndo').onclick = async () => { const r = await cg('undo'); toast(r.ok === false ? r.msg : 'Last hazard undone'); refreshAll(); };
     $('bSos').onclick = async () => {
       const u = $('uid').value.trim() || 'U1', nm = ($('uname').value.trim() || 'Student').replace(/\s+/g, '_');
-      const r = await cg(`sos ${u} ${nm} ${MAP.nodes[sel].id} ${$('ukind').value}`);
+      const r = await cg(`sos ${u} ${nm} ${MAP.nodes[sel].id} ${$('ukind').value} ${$('routeMode').value}`);
       if (r.ok === false) return toast(r.msg);
       lastKind = 'center'; toast(`SOS #${r.ticket} sent (queue ${r.queue})`);
       $('sosOut').innerHTML = `<div class="card"><b>SOS #${r.ticket} is in the dispatch queue.</b><div class="muted">Follow the green route to the Oval, then tap “I am here”.</div></div>`;

@@ -4,11 +4,12 @@
 
 static const char* HELP =
     "CampusGuard CLI - Rizal Building (5 floors) + MCL Track Oval\n"
-    "  map | tree | search ID | oval | ranked ID | route ID exit|center | contacts\n"
-    "  find ID alarm|extinguisher|hose|refuge|exit|center      (legend items on the plans)\n"
+    "  map | tree | search ID_OR_NAME | suggest PREFIX | recent | nextrecent | oval | ranked ID\n"
+    "  route ID exit|center [distance] | route ID to DEST_ID | find ID alarm|extinguisher|hose|refuge|exit|center [distance]\n"
     "  hazard ID | hazard ID1 ID2 | undo | status\n"
     "  sos USER NAME NODE KIND | next | register USER NAME NODE | unregister USER | checkin USER\n"
-    "  addroom ID NAME FLOOR LINK_ID METERS | delroom ID | report | demo | help | quit\n"
+    "  remember ID | addroom ID NAME FLOOR LINK_ID METERS | delroom ID | report | demo | help | quit\n"
+    "  Use underscores for spaces; route defaults to fewest hallway connections.\n"
     "  IDs: rooms R200-R214, R301-R314, R400-R412, R405A/B, R501-R503, CR3, FAC3, CLIR3, RC4, LAB4E, LAB4N, AUD5\n"
     "       stairs F<floor>WS/ES/CS/NS, junction F<floor>CJ, corridor F<floor>C1.., exits EXW/EXE/EXN, OVAL\n";
 

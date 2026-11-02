@@ -1,7 +1,8 @@
-// A graph of rooms and hallways. BFS plans routes; DFS finds cut-off rooms.
+// A graph of rooms and hallways. BFS and Dijkstra plan routes; DFS finds cut-off rooms.
 #pragma once
 
 #include <algorithm>
+#include <limits>
 #include <string>
 #include <vector>
 #include "ds.hpp"
@@ -154,6 +155,56 @@ public:
         }
         std::reverse(path.begin(), path.end());
         return path;
+    }
+
+    template <class Goal>
+    std::vector<int> dijkstra(int start, Goal isGoal) const {
+        struct Candidate {
+            int meters;
+            int node;
+
+            bool operator<(const Candidate& other) const {
+                if (meters != other.meters) return meters > other.meters;
+                return node > other.node;
+            }
+        };
+
+        if (start < 0 || static_cast<size_t>(start) >= nodes.size() ||
+            !nodes[start].active) return {};
+
+        const int infinity = std::numeric_limits<int>::max();
+        std::vector<int> distance(nodes.size(), infinity);
+        std::vector<int> parent(nodes.size(), -2);
+        MaxHeap<Candidate> pending;
+        distance[start] = 0;
+        parent[start] = -1;
+        pending.push({0, start});
+
+        while (!pending.empty()) {
+            const Candidate current = pending.pop();
+            if (current.meters != distance[current.node]) continue;
+            if (isGoal(current.node)) {
+                std::vector<int> path;
+                for (int index = current.node; index != -1; index = parent[index]) {
+                    path.push_back(index);
+                }
+                std::reverse(path.begin(), path.end());
+                return path;
+            }
+
+            for (const Edge& edge : adj[current.node]) {
+                const int next = edge.to;
+                if (edge.blocked || edge.meters < 0 || nodes[next].blocked || !nodes[next].active) continue;
+                if (current.meters > infinity - edge.meters) continue;
+
+                const int nextDistance = current.meters + edge.meters;
+                if (nextDistance >= distance[next]) continue;
+                distance[next] = nextDistance;
+                parent[next] = current.node;
+                pending.push({nextDistance, next});
+            }
+        }
+        return {};
     }
 
     // Start at each open exit; rooms not reached by DFS are cut off.

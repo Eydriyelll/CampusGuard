@@ -81,13 +81,25 @@
             <p class="eyebrow">YOUR LOCATION</p>
             <div id="selInfo" class="selection-value">Choose a room or hallway on the map</div>
             <p id="hint" class="hint" aria-live="polite">Tap a room to start planning your route.</p>
+            <label>Find a room or location<input id="locationSearch" type="search" placeholder="Room name or ID" autocomplete="off"></label>
+            <div id="locationSuggestions" class="location-suggestions"></div>
+            <p class="eyebrow recent-heading">RECENT LOCATIONS</p>
+            <div id="recentLocations" class="recent-locations"></div>
+            <button id="bNextRecent" class="btn wide">Cycle recent locations</button>
           </section>
 
           <section class="action-card">
             <p class="eyebrow">PLAN A ROUTE</p>
+            <label>Route preference
+              <select id="routeMode">
+                <option value="connections">Fewest hallway connections</option>
+                <option value="distance">Shortest estimated distance</option>
+              </select>
+            </label>
             <div class="action-stack">
               <button id="bOval" class="btn primary"><span>Route to assembly point</span><span aria-hidden="true">→</span></button>
               <button id="bExit" class="btn"><span>Find nearest fire exit</span><span aria-hidden="true">→</span></button>
+              <button id="bRanked" class="btn">Compare exits and assembly point</button>
             </div>
             <div class="facility-grid">
               <button id="fAlarm" class="btn" title="Find the nearest fire alarm">Fire alarm</button>
@@ -98,6 +110,7 @@
             <div class="route-result" id="routeCard">
               <div class="empty-route">Your route and step-by-step directions will appear here.</div>
             </div>
+            <div class="route-result" id="rankedRoutes"></div>
           </section>
 
           <details class="hazard-tools">

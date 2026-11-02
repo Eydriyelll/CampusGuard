@@ -9,29 +9,26 @@ polished interface in `web/`.
 ```text
 core/
   include/       C++ structures and algorithms used by the app
-  lessons/       Small examples for the rest of the DSA curriculum
   src/           App and console entry points
 web/             Shared desktop and phone interface
 ```
 
-### Find a feature or lesson
+### Find a feature
 
 | If you want to explain... | Open this file |
 |---|---|
-| People list, stack, or SOS queue | `core/include/ds.hpp` |
-| Campus → building → floor → room tree | `core/include/Tree.hpp` |
-| Campus graph, BFS routes, or DFS cut-off check | `core/include/Graph.hpp` |
+| People list, SOS queue, recent-place circular list, or route-ranking heap | `core/include/ds.hpp` |
+| Campus hierarchy, binary tree, name BST, AVL room index, or prefix trie | `core/include/Tree.hpp` |
+| Campus graph, BFS/DFS, or weighted Dijkstra routes | `core/include/Graph.hpp` |
 | Merge sort or binary search | `core/include/Algorithms.hpp` |
-| Room layout, distances, or app commands | `core/include/Campus.hpp` |
-| Binary tree, BST, AVL tree, heap, or trie | `core/lessons/trees.hpp` |
-| Circular linked list | `core/lessons/linked_lists.hpp` |
-| Dijkstra shortest path | `core/lessons/shortest_path.hpp` |
-| Full DSA lesson index | `core/lessons/README.md` |
-| Screen layout, styling, or interactions | `web/index.html`, `web/style.css`, `web/app.js` |
+| Room layout, indexes, route options, SOS, and app commands | `core/include/Campus.hpp` |
+| Search, recent locations, route preference, or route comparison UI | `web/index.html`, `web/app.js`, `web/style.css` |
+| Phone/offline engine mirror | `web/engine.js` |
 
-In VS Code, use **Go to Symbol** or search for the class/function name in the lesson index.
-The lesson examples stay out of the app UI and are clearly labeled when they are not used by
-the evacuation workflows.
+These structures now support app actions: location suggestions use a trie, exact names
+use a binary search tree, added rooms use an AVL index, recent locations cycle through a
+circular list, and alternate distance-based routes use Dijkstra and a heap. The existing
+fewest-connections route remains the default. SOS requests are still handled FIFO.
 
 ## Build and run
 
@@ -41,7 +38,6 @@ the app's source code. For a direct C++ build without CMake:
 ```sh
 ./build_native.sh              # build the console app
 ./build/campusguard            # run it; type "demo" for the walkthrough
-./build_native.sh --lessons    # build and check the standalone DSA examples
 ```
 
 On macOS, `./build_app_mac.sh` builds and opens the desktop app. On Windows, run

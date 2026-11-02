@@ -8,6 +8,150 @@
   const ROOM = 0, HALL = 1, EXIT = 2, CENTER = 3;
   const TAG_FACP = 1, TAG_FE = 2, TAG_HOSE = 4, TAG_REFUGE = 8, TAG_FIREEXIT = 16;   // legend items (see Graph.hpp)
 
+  class BinaryTreeNode {
+    constructor(value) { this.value = value; this.left = null; this.right = null; }
+  }
+  class BinaryTree {
+    constructor() { this.root = null; }
+  }
+  class BinarySearchTree extends BinaryTree {
+    insert(value) {
+      const add = node => {
+        if (!node) return new BinaryTreeNode(value);
+        if (value < node.value) node.left = add(node.left);
+        else if (node.value < value) node.right = add(node.right);
+        return node;
+      };
+      this.root = add(this.root);
+    }
+    contains(value) {
+      let node = this.root;
+      while (node) {
+        if (value === node.value) return true;
+        node = value < node.value ? node.left : node.right;
+      }
+      return false;
+    }
+  }
+  class AvlIndex {
+    constructor() { this.root = null; }
+    height(node) { return node ? node.height : 0; }
+    update(node) { node.height = 1 + Math.max(this.height(node.left), this.height(node.right)); }
+    rotateRight(top) {
+      const next = top.left; top.left = next.right; this.update(top); next.right = top; this.update(next); return next;
+    }
+    rotateLeft(top) {
+      const next = top.right; top.right = next.left; this.update(top); next.left = top; this.update(next); return next;
+    }
+    insert(key, value) {
+      const add = node => {
+        if (!node) return { key, value, height: 1, left: null, right: null };
+        if (key < node.key) node.left = add(node.left);
+        else if (node.key < key) node.right = add(node.right);
+        else { node.value = value; return node; }
+        this.update(node);
+        const balance = this.height(node.left) - this.height(node.right);
+        if (balance > 1) {
+          if (key > node.left.key) node.left = this.rotateLeft(node.left);
+          return this.rotateRight(node);
+        }
+        if (balance < -1) {
+          if (key < node.right.key) node.right = this.rotateRight(node.right);
+          return this.rotateLeft(node);
+        }
+        return node;
+      };
+      this.root = add(this.root);
+    }
+    find(key) {
+      let node = this.root;
+      while (node) {
+        if (key === node.key) return node.value;
+        node = key < node.key ? node.left : node.right;
+      }
+      return -1;
+    }
+  }
+  class Trie {
+    constructor() { this.root = { children: new Map(), matches: [] }; }
+    insert(word, index) {
+      let node = this.root;
+      for (const letter of word) {
+        if (!node.children.has(letter)) node.children.set(letter, { children: new Map(), matches: [] });
+        node = node.children.get(letter);
+        if (node.matches[node.matches.length - 1] !== index) node.matches.push(index);
+      }
+    }
+    prefix(word, limit = 12) {
+      let node = this.root;
+      for (const letter of word) {
+        node = node.children.get(letter);
+        if (!node) return [];
+      }
+      return node.matches.slice(0, limit);
+    }
+  }
+  class CircularList {
+    constructor(limit = 8) { this.limit = limit; this.size = 0; this.head = null; this.tail = null; this.current = null; }
+    add(value) {
+      if (!this.limit) return;
+      if (this.size === this.limit) {
+        const oldest = this.head;
+        if (this.size === 1) this.head = this.tail = this.current = null;
+        else {
+          this.head = oldest.next; this.tail.next = this.head;
+          if (this.current === oldest) this.current = this.head;
+        }
+        this.size--;
+      }
+      const item = { value, next: null };
+      if (!this.head) this.head = this.tail = this.current = item, item.next = item;
+      else { item.next = this.head; this.tail.next = item; this.tail = this.current = item; }
+      this.size++;
+    }
+    next() {
+      if (!this.head) return null;
+      this.current = this.current ? this.current.next : this.head;
+      return this.current.value;
+    }
+    values() {
+      const result = [];
+      if (!this.head) return result;
+      let node = this.head;
+      do { result.push(node.value); node = node.next; } while (node !== this.head);
+      return result;
+    }
+  }
+  class MaxHeap {
+    constructor(less = (a, b) => a < b) { this.values = []; this.less = less; }
+    get size() { return this.values.length; }
+    push(value) {
+      this.values.push(value);
+      let child = this.values.length - 1;
+      while (child > 0) {
+        const parent = Math.floor((child - 1) / 2);
+        if (!this.less(this.values[parent], this.values[child])) break;
+        [this.values[parent], this.values[child]] = [this.values[child], this.values[parent]];
+        child = parent;
+      }
+    }
+    pop() {
+      const largest = this.values[0], last = this.values.pop();
+      if (this.values.length) {
+        this.values[0] = last;
+        let parent = 0;
+        while (parent * 2 + 1 < this.values.length) {
+          let child = parent * 2 + 1;
+          if (child + 1 < this.values.length && this.less(this.values[child], this.values[child + 1])) child++;
+          if (!this.less(this.values[parent], this.values[child])) break;
+          [this.values[parent], this.values[child]] = [this.values[child], this.values[parent]];
+          parent = child;
+        }
+      }
+      return largest;
+    }
+  }
+
   class Graph {
     constructor() { this.nodes = []; this.adj = []; }
     addNode(id, name, kind, floor, x, y) { this.nodes.push({ id, name, kind, floor, x, y, blocked: false, active: true, tags: 0 }); this.adj.push([]); return this.nodes.length - 1; }
@@ -34,6 +178,30 @@
       if (best === -1) return [];
       const p = []; for (let v = best; v !== -1; v = par[v]) p.push(v); return p.reverse();
     }
+    dijkstra(start, goal) {
+      if (start < 0 || !this.nodes[start] || !this.nodes[start].active) return [];
+      const distance = new Array(this.nodes.length).fill(Infinity), parent = new Array(this.nodes.length).fill(-2);
+      const pending = new MaxHeap((a, b) => a.meters > b.meters || (a.meters === b.meters && a.node > b.node));
+      distance[start] = 0; parent[start] = -1; pending.push({ meters: 0, node: start });
+      while (pending.size) {
+        const current = pending.pop();
+        if (current.meters !== distance[current.node]) continue;
+        if (goal(current.node)) {
+          const path = [];
+          for (let i = current.node; i !== -1; i = parent[i]) path.push(i);
+          return path.reverse();
+        }
+        for (const edge of this.adj[current.node]) {
+          const next = edge.to;
+          if (edge.blocked || edge.meters < 0 || this.nodes[next].blocked || !this.nodes[next].active) continue;
+          const nextDistance = current.meters + edge.meters;
+          if (nextDistance >= distance[next]) continue;
+          distance[next] = nextDistance; parent[next] = current.node;
+          pending.push({ meters: nextDistance, node: next });
+        }
+      }
+      return [];
+    }
     // DFS from every open exit; indoor rooms/halls never reached are CUT OFF.
     cutOff() {
       const seen = new Array(this.nodes.length).fill(false), st = [];
@@ -57,9 +225,11 @@
   class Campus {
     constructor() {
       this.g = new Graph(); this.root = new TreeNode('Campus'); this.floorNode = [];
-      this.people = []; this.sosQ = []; this.hist = []; this.byId = new Map();
+      this.people = []; this.sosQ = []; this.hist = []; this.byId = [];
+      this.dynamicById = new AvlIndex(); this.nameTree = new BinarySearchTree(); this.nameLookup = new Map();
+      this.locationTrie = new Trie(); this.recent = new CircularList();
       this.ticket = 0; this.handled = 0; this.hazardEvents = 0;
-      this.buildRizal(); this.rebuildIndex(); this.buildTree();
+      this.buildRizal(); this.baseNodeCount = this.g.nodes.length; this.rebuildIndex(); this.buildTree();
     }
     buildRizal() {
       const g = this.g, rd = (id, name, bay, north) => ({ id, name, bay, north });
@@ -116,12 +286,33 @@
       for (const n of this.g.nodes) if (n.active && n.floor >= 1 && (n.kind === ROOM || n.kind === EXIT)) this.floorNode[n.floor].add(n.name);
       this.root.add('Grounds').add('MCL Track Oval');
     }
-    rebuildIndex() { this.byId.clear(); this.g.nodes.forEach((n, i) => { if (n.active) this.byId.set(n.id, i); }); }
-    idx(id) { return this.byId.has(id) ? this.byId.get(id) : -1; }
+    rebuildIndex() {
+      this.byId = []; this.dynamicById = new AvlIndex(); this.nameTree = new BinarySearchTree();
+      this.nameLookup = new Map(); this.locationTrie = new Trie();
+      this.g.nodes.forEach((n, i) => {
+        if (!n.active) return;
+        if (i < this.baseNodeCount) this.byId.push([n.id, i]); else this.dynamicById.insert(n.id, i);
+        const name = n.name.toLowerCase();
+        this.nameTree.insert(name);
+        if (!this.nameLookup.has(name)) this.nameLookup.set(name, i);
+        this.locationTrie.insert(n.id.toLowerCase(), i);
+        this.locationTrie.insert(name, i);
+      });
+      this.byId.sort((a, b) => a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : 0);
+    }
+    idx(id) {
+      let low = 0, high = this.byId.length - 1;
+      while (low <= high) {
+        const middle = Math.floor((low + high) / 2), key = this.byId[middle][0];
+        if (key === id) return this.byId[middle][1];
+        if (key < id) low = middle + 1; else high = middle - 1;
+      }
+      return this.dynamicById.find(id);
+    }
     err(m) { return { ok: false, msg: m }; }
-    plan(from, kind) { return this.planIf(from, i => this.g.nodes[i].kind === kind); }
-    planIf(from, goal) {
-      const g = this.g, r = { path: g.bfs(from, goal), meters: 0, toExit: 0, exit: '' };
+    plan(from, kind, shortestDistance = false) { return this.planIf(from, i => this.g.nodes[i].kind === kind, shortestDistance); }
+    planIf(from, goal, shortestDistance = false) {
+      const g = this.g, r = { path: shortestDistance ? g.dijkstra(from, goal) : g.bfs(from, goal), meters: 0, toExit: 0, exit: '' };
       let past = false;
       r.path.forEach((v, i) => {
         if (i) { const m = g.meters(r.path[i - 1], v); r.meters += m; if (!past) r.toExit += m; }
@@ -134,7 +325,7 @@
       const g = this.g;
       return { ok: true, path: r.path.map(v => g.nodes[v].id), names: r.path.map(v => g.nodes[v].name), meters: r.meters, steps: r.path.length - 1, exit: r.exit, toExit: r.toExit, toOval: r.meters - r.toExit };
     }
-    nearest(from, kind) { return this.pathObj(this.plan(from, kind)); }
+    nearest(from, kind, shortestDistance = false) { return this.pathObj(this.plan(from, kind, shortestDistance)); }
     mapObj() {
       const g = this.g, nodes = g.nodes.map(n => n.active ? { id: n.id, name: n.name, k: n.kind, f: n.floor, x: Math.trunc(n.x), y: Math.trunc(n.y), b: n.blocked ? 1 : 0, t: n.tags } : null), edges = [];
       g.adj.forEach((l, a) => l.forEach(e => { if (a < e.to) edges.push([a, e.to, e.meters, e.blocked ? 1 : 0]); }));
@@ -150,14 +341,47 @@
 
       if (c === 'map') return this.mapObj();
       if (c === 'tree') return this.root;
-      if (c === 'search') { const i = this.idx(a); if (i < 0) return this.err('Not found'); const n = g.nodes[i]; return { ok: true, id: n.id, name: n.name, kind: n.kind, floor: n.floor }; }
-      if (c === 'route') { const i = this.idx(a); if (i < 0) return this.err('Unknown location'); return this.nearest(i, b === 'center' ? CENTER : EXIT); }
+      if (c === 'search') {
+        let i = this.idx(a);
+        const name = Campus.unus(a).toLowerCase();
+        if (i < 0 && this.nameTree.contains(name)) i = this.nameLookup.has(name) ? this.nameLookup.get(name) : -1;
+        if (i < 0) return this.err('Not found');
+        const n = g.nodes[i]; return { ok: true, id: n.id, name: n.name, kind: n.kind, floor: n.floor };
+      }
+      if (c === 'suggest') {
+        const prefix = Campus.unus(a).toLowerCase();
+        if (!prefix) return this.err('Enter part of a room name or ID');
+        const found = new Set();
+        return this.locationTrie.prefix(prefix).filter(i => {
+          if (found.has(i) || !g.nodes[i].active) return false;
+          found.add(i); return true;
+        }).map(i => ({ id: g.nodes[i].id, name: g.nodes[i].name }));
+      }
+      if (c === 'remember') {
+        const i = this.idx(a); if (i < 0) return this.err('Unknown location');
+        this.recent.add(g.nodes[i].id); return { ok: true, msg: 'Location saved' };
+      }
+      if (c === 'recent') return this.recent.values();
+      if (c === 'nextrecent') {
+        const id = this.recent.next(); if (!id) return this.err('No recently selected locations');
+        const i = this.idx(id); if (i < 0) return this.err('Recently selected location is no longer available');
+        return { ok: true, id, name: g.nodes[i].name };
+      }
+      if (c === 'route') {
+        const i = this.idx(a); if (i < 0) return this.err('Unknown location');
+        if (b === 'to') {
+          const destination = this.idx(d); if (destination < 0) return this.err('Unknown destination');
+          return this.pathObj(this.planIf(i, x => x === destination, true));
+        }
+        return this.nearest(i, b === 'center' ? CENTER : EXIT, d === 'distance');
+      }
       if (c === 'find') {
         const i = this.idx(a); if (i < 0) return this.err('Unknown location');
-        if (b === 'exit') return this.nearest(i, EXIT); if (b === 'center') return this.nearest(i, CENTER);
+        const shortestDistance = d === 'distance';
+        if (b === 'exit') return this.nearest(i, EXIT, shortestDistance); if (b === 'center') return this.nearest(i, CENTER, shortestDistance);
         const bit = b === 'alarm' ? TAG_FACP : b === 'extinguisher' ? TAG_FE : b === 'hose' ? TAG_HOSE : b === 'refuge' ? TAG_REFUGE : 0;
         if (!bit) return this.err('Usage: find ID alarm|extinguisher|hose|refuge|exit|center');
-        return this.pathObj(this.planIf(i, x => (g.nodes[x].tags & bit) !== 0));
+        return this.pathObj(this.planIf(i, x => (g.nodes[x].tags & bit) !== 0, shortestDistance));
       }
       if (c === 'contacts') return { ok: true, contacts: [{ name: 'MCL Security Office', number: 'local 4099' }, { name: 'Cabuyao PNP', number: '(049) 502 6535 / 0927 952 2360' },
         { name: 'Cabuyao Fire Station', number: '(049) 544 5628 / 0932 741 1457' }], relay: ['What is your name?', 'What happened?', 'Where are you?', 'Is anyone hurt?'],
@@ -172,14 +396,16 @@
         return out;
       }
       if (c === 'ranked') {
-        const from = this.idx(a); if (from < 0) return this.err('Unknown location'); const r = [];
+        const from = this.idx(a); if (from < 0) return this.err('Unknown location');
+        const ranked = new MaxHeap((x, y) => x.meters < y.meters || (x.meters === y.meters && x.index < y.index));
         g.nodes.forEach((n, i) => {
-          if (n.active && (n.kind === EXIT || n.kind === CENTER)) {
-            const p = g.bfs(from, x => x === i); if (!p.length) return;
-            let m = 0; for (let k = 1; k < p.length; k++) m += g.meters(p[k - 1], p[k]); r.push({ id: n.id, meters: m });
+          if (n.active && !n.blocked && (n.kind === EXIT || n.kind === CENTER)) {
+            const p = g.dijkstra(from, x => x === i); if (!p.length) return;
+            let m = 0; for (let k = 1; k < p.length; k++) m += g.meters(p[k - 1], p[k]); ranked.push({ id: n.id, meters: m, index: i });
           }
         });
-        return r.sort((x, y) => x.meters - y.meters);        // stable, like merge sort
+        const result = []; while (ranked.size) result.push(ranked.pop());
+        return result.reverse().map(({ id, meters }) => ({ id, meters }));
       }
       if (c === 'hazard') {
         const i = this.idx(a); if (i < 0) return this.err('Unknown location');
@@ -206,7 +432,7 @@
         const i = this.idx(d); if (i < 0) return this.err('Unknown location');
         const p = this.people.find(x => x.id === a); if (p) p.node = i; else this.people.push({ id: a, name: Campus.unus(b), node: i, in: false });
         this.sosQ.push({ ticket: ++this.ticket, user: a, node: i, kind: e === '' ? 'distress' : e });
-        return { ok: true, ticket: this.ticket, queue: this.sosQ.length, route: this.nearest(i, CENTER) };
+        return { ok: true, ticket: this.ticket, queue: this.sosQ.length, route: this.nearest(i, CENTER, f5 === 'distance') };
       }
       if (c === 'next') {
         if (!this.sosQ.length) return this.err('Dispatch queue is empty'); const s = this.sosQ.shift(); this.handled++;
