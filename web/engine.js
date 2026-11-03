@@ -154,7 +154,7 @@
 
   class Graph {
     constructor() { this.nodes = []; this.adj = []; }
-    addNode(id, name, kind, floor, x, y) { this.nodes.push({ id, name, kind, floor, x, y, blocked: false, active: true, tags: 0 }); this.adj.push([]); return this.nodes.length - 1; }
+    addNode(id, name, kind, floor, x, y) { this.nodes.push({ id, name, kind, floor, x, y, blocked: false, crowded: false, active: true, tags: 0 }); this.adj.push([]); return this.nodes.length - 1; }
     addEdge(a, b, m) { this.adj[a].push({ to: b, meters: m, blocked: false }); this.adj[b].push({ to: a, meters: m, blocked: false }); }
     removeNode(i) { for (const e of this.adj[i]) this.adj[e.to] = this.adj[e.to].filter(x => x.to !== i); this.adj[i] = []; this.nodes[i].active = false; }
     meters(a, b) { for (const e of this.adj[a]) if (e.to === b) return e.meters; return 0; }
@@ -170,7 +170,7 @@
         if (best !== -1 && lvl[u] > lvl[best]) break;
         if (goal(u)) { if (best === -1 || dist[u] < dist[best]) best = u; continue; }
         for (const e of this.adj[u]) {
-          if (e.blocked || this.nodes[e.to].blocked || !this.nodes[e.to].active) continue;
+          if (e.blocked || this.nodes[e.to].blocked || this.nodes[e.to].crowded || !this.nodes[e.to].active) continue;
           if (par[e.to] === -2) { par[e.to] = u; lvl[e.to] = lvl[u] + 1; dist[e.to] = dist[u] + e.meters; q.push(e.to); }
           else if (lvl[e.to] === lvl[u] + 1 && dist[u] + e.meters < dist[e.to]) { par[e.to] = u; dist[e.to] = dist[u] + e.meters; }
         }
@@ -193,7 +193,7 @@
         }
         for (const edge of this.adj[current.node]) {
           const next = edge.to;
-          if (edge.blocked || edge.meters < 0 || this.nodes[next].blocked || !this.nodes[next].active) continue;
+          if (edge.blocked || edge.meters < 0 || this.nodes[next].blocked || this.nodes[next].crowded || !this.nodes[next].active) continue;
           const nextDistance = current.meters + edge.meters;
           if (nextDistance >= distance[next]) continue;
           distance[next] = nextDistance; parent[next] = current.node;
@@ -205,8 +205,8 @@
     // DFS from every open exit; indoor rooms/halls never reached are CUT OFF.
     cutOff() {
       const seen = new Array(this.nodes.length).fill(false), st = [];
-      this.nodes.forEach((n, i) => { if (n.active && n.kind === EXIT && !n.blocked) { seen[i] = true; st.push(i); } });
-      while (st.length) { const u = st.pop(); for (const e of this.adj[u]) if (!seen[e.to] && !e.blocked && !this.nodes[e.to].blocked) { seen[e.to] = true; st.push(e.to); } }
+      this.nodes.forEach((n, i) => { if (n.active && n.kind === EXIT && !n.blocked && !n.crowded) { seen[i] = true; st.push(i); } });
+      while (st.length) { const u = st.pop(); for (const e of this.adj[u]) if (!seen[e.to] && !e.blocked && !this.nodes[e.to].blocked && !this.nodes[e.to].crowded) { seen[e.to] = true; st.push(e.to); } }
       const out = [];
       this.nodes.forEach((n, i) => { if (n.active && n.floor >= 1 && !seen[i] && !n.blocked && (n.kind === ROOM || n.kind === HALL)) out.push(i); });
       return out;
@@ -228,6 +228,7 @@
       this.people = []; this.sosQ = []; this.hist = []; this.byId = [];
       this.dynamicById = new AvlIndex(); this.nameTree = new BinarySearchTree(); this.nameLookup = new Map();
       this.locationTrie = new Trie(); this.recent = new CircularList();
+      this.fireSimulation = false; this.fireSimulationNode = -1; this.previousBlocked = []; this.previousCrowded = [];
       this.ticket = 0; this.handled = 0; this.hazardEvents = 0;
       this.buildRizal(); this.baseNodeCount = this.g.nodes.length; this.rebuildIndex(); this.buildTree();
     }
@@ -254,16 +255,19 @@
           NW[f] = N(F + 'NW', f === 1 ? L + 'NE Wing Lobby' : L + 'NE Wing Hall', HALL, jx + 12, 24, TAG_FE);
           NS[f] = N(F + 'NS', L + 'NE Stairs', HALL, jx + 24, 10, TAG_FACP | TAG_FE | TAG_FIREEXIT);
           g.addEdge(WS[f], bay[1], 6); for (let k = 1; k < n; k++) g.addEdge(bay[k], bay[k + 1], step);
-          g.addEdge(bay[n], ES[f], step); g.addEdge(bay[J], CS[f], SEG_CJ_CS); g.addEdge(CS[f], NW[f], SEG_CS_NW); g.addEdge(NW[f], NS[f], SEG_NW_NS);
+          g.addEdge(bay[n], ES[f], step); g.addEdge(bay[J], CS[f], SEG_CJ_CS);
+          g.addEdge(CS[f], NW[f], SEG_CS_NW); g.addEdge(NW[f], NS[f], SEG_NW_NS);
           for (const d of R[f]) { const r = N(d.id, d.name, ROOM, 16 + (d.bay - 1) * gap, d.north ? 40 : 80, TAG_FE); g.addEdge(r, bay[d.bay], ROOM_DOOR); }
         } else {
           WS[f] = N(F + 'WS', L + 'West Stairs', HALL, 8, 50, STAIRS);
           const nc = N(F + 'NC', L + 'North Corridor', HALL, 32, 30, 0), cj = N(F + 'CJ', L + 'Central Junction', HALL, 60, 32, 0), sm = N(F + 'SM', L + 'East Corridor', HALL, 60, 50, 0),
                 sj = N(F + 'SJ', L + 'South-East Corner', HALL, 60, 68, 0), sc = N(F + 'SC', L + 'South Corridor', HALL, 32, 68, 0);
-          CS[f] = N(F + 'CS', L + 'Core Stairs', HALL, 60, 18, STAIRS); NW[f] = N(F + 'NW', L + 'NE Wing Hall', HALL, 72, 12, TAG_FE);
+          CS[f] = N(F + 'CS', L + 'Core Stairs', HALL, 60, 18, STAIRS);
+          NW[f] = N(F + 'NW', L + 'NE Wing Hall', HALL, 72, 12, TAG_FE);
           NS[f] = N(F + 'NS', L + 'NE Stairs', HALL, 84, 6, TAG_FACP | TAG_FE | TAG_FIREEXIT);
           g.addEdge(WS[f], nc, 22); g.addEdge(nc, cj, 20); g.addEdge(cj, sm, 15); g.addEdge(sm, sj, 15); g.addEdge(sj, sc, 20); g.addEdge(sc, WS[f], 22);
-          g.addEdge(cj, CS[f], SEG_CJ_CS); g.addEdge(CS[f], NW[f], SEG_CS_NW); g.addEdge(NW[f], NS[f], SEG_NW_NS);
+          g.addEdge(cj, CS[f], SEG_CJ_CS);
+          g.addEdge(CS[f], NW[f], SEG_CS_NW); g.addEdge(NW[f], NS[f], SEG_NW_NS);
           const au = N('AUD5', 'Auditorium', ROOM, 38, 49, TAG_FE); g.addEdge(au, nc, 6); g.addEdge(au, sc, 6);
           const r1 = N('R501', 'Room 501', ROOM, 82, 30, TAG_FE), r2 = N('R502', 'Room 502', ROOM, 82, 48, TAG_FE), r3 = N('R503', 'Room 503', ROOM, 82, 66, TAG_FE);
           g.addEdge(r1, cj, ROOM_DOOR + 2); g.addEdge(r2, sm, ROOM_DOOR + 2); g.addEdge(r3, sj, ROOM_DOOR + 2);
@@ -271,7 +275,8 @@
       }
       for (const x of X) { const l = x.link === 'NW' ? NW[x.floor] : NS[x.floor]; const r = g.addNode(x.id, x.name, ROOM, x.floor, g.nodes[l].x + x.dx, g.nodes[l].y + x.dy); g.nodes[r].tags = TAG_FE; g.addEdge(r, l, x.m); }
       for (let f = 1; f < FLOORS; f++) {
-        g.addEdge(WS[f], WS[f + 1], STAIR_FLOOR); g.addEdge(CS[f], CS[f + 1], STAIR_FLOOR); g.addEdge(NS[f], NS[f + 1], STAIR_FLOOR);
+        g.addEdge(WS[f], WS[f + 1], STAIR_FLOOR); g.addEdge(CS[f], CS[f + 1], STAIR_FLOOR);
+        g.addEdge(NS[f], NS[f + 1], STAIR_FLOOR);
         if (ES[f] && ES[f + 1]) g.addEdge(ES[f], ES[f + 1], STAIR_FLOOR);
       }
       const exw = g.addNode('EXW', 'Exit West', EXIT, 1, 0, 60), exe = g.addNode('EXE', 'Exit East', EXIT, 1, 98, 60), exn = g.addNode('EXN', 'Exit NE Wing', EXIT, 1, 90, 0);
@@ -310,7 +315,7 @@
       return this.dynamicById.find(id);
     }
     err(m) { return { ok: false, msg: m }; }
-    plan(from, kind, shortestDistance = false) { return this.planIf(from, i => this.g.nodes[i].kind === kind, shortestDistance); }
+    plan(from, kind, shortestDistance = false) { return this.planIf(from, i => this.g.nodes[i].kind === kind && (kind !== EXIT || !this.g.nodes[i].crowded), shortestDistance); }
     planIf(from, goal, shortestDistance = false) {
       const g = this.g, r = { path: shortestDistance ? g.dijkstra(from, goal) : g.bfs(from, goal), meters: 0, toExit: 0, exit: '' };
       let past = false;
@@ -327,7 +332,7 @@
     }
     nearest(from, kind, shortestDistance = false) { return this.pathObj(this.plan(from, kind, shortestDistance)); }
     mapObj() {
-      const g = this.g, nodes = g.nodes.map(n => n.active ? { id: n.id, name: n.name, k: n.kind, f: n.floor, x: Math.trunc(n.x), y: Math.trunc(n.y), b: n.blocked ? 1 : 0, t: n.tags } : null), edges = [];
+      const g = this.g, nodes = g.nodes.map(n => n.active ? { id: n.id, name: n.name, k: n.kind, f: n.floor, x: Math.trunc(n.x), y: Math.trunc(n.y), b: n.blocked ? 1 : 0, q: n.crowded ? 1 : 0, t: n.tags } : null), edges = [];
       g.adj.forEach((l, a) => l.forEach(e => { if (a < e.to) edges.push([a, e.to, e.meters, e.blocked ? 1 : 0]); }));
       return { nodes, edges };
     }
@@ -371,6 +376,7 @@
         const i = this.idx(a); if (i < 0) return this.err('Unknown location');
         if (b === 'to') {
           const destination = this.idx(d); if (destination < 0) return this.err('Unknown destination');
+          if (g.nodes[destination].crowded || g.nodes[destination].blocked) return this.err('That destination is blocked or crowded');
           return this.pathObj(this.planIf(i, x => x === destination, true));
         }
         return this.nearest(i, b === 'center' ? CENTER : EXIT, d === 'distance');
@@ -378,7 +384,8 @@
       if (c === 'find') {
         const i = this.idx(a); if (i < 0) return this.err('Unknown location');
         const shortestDistance = d === 'distance';
-        if (b === 'exit') return this.nearest(i, EXIT, shortestDistance); if (b === 'center') return this.nearest(i, CENTER, shortestDistance);
+        if (b === 'exit') return this.pathObj(this.planIf(i, x => g.nodes[x].kind === EXIT && !g.nodes[x].crowded, shortestDistance));
+        if (b === 'center') return this.nearest(i, CENTER, shortestDistance);
         const bit = b === 'alarm' ? TAG_FACP : b === 'extinguisher' ? TAG_FE : b === 'hose' ? TAG_HOSE : b === 'refuge' ? TAG_REFUGE : 0;
         if (!bit) return this.err('Usage: find ID alarm|extinguisher|hose|refuge|exit|center');
         return this.pathObj(this.planIf(i, x => (g.nodes[x].tags & bit) !== 0, shortestDistance));
@@ -399,13 +406,42 @@
         const from = this.idx(a); if (from < 0) return this.err('Unknown location');
         const ranked = new MaxHeap((x, y) => x.meters < y.meters || (x.meters === y.meters && x.index < y.index));
         g.nodes.forEach((n, i) => {
-          if (n.active && !n.blocked && (n.kind === EXIT || n.kind === CENTER)) {
+          if (n.active && !n.blocked && !n.crowded && (n.kind === EXIT || n.kind === CENTER)) {
             const p = g.dijkstra(from, x => x === i); if (!p.length) return;
             let m = 0; for (let k = 1; k < p.length; k++) m += g.meters(p[k - 1], p[k]); ranked.push({ id: n.id, meters: m, index: i });
           }
         });
         const result = []; while (ranked.size) result.push(ranked.pop());
         return result.reverse().map(({ id, meters }) => ({ id, meters }));
+      }
+      if (c === 'crowd') {
+        const i = this.idx(a); if (i < 0) return this.err('Unknown location');
+        if (g.nodes[i].kind !== HALL && g.nodes[i].kind !== EXIT) return this.err('Crowding can only be reported at a hallway or exit');
+        g.nodes[i].crowded = !g.nodes[i].crowded;
+        return this.execObj('status');
+      }
+      if (c === 'simulatefire') {
+        if (this.fireSimulation) {
+          for (const [index, before] of this.previousBlocked) g.nodes[index].blocked = before;
+          for (const [index, before] of this.previousCrowded) g.nodes[index].crowded = before;
+          this.fireSimulation = false; this.fireSimulationNode = -1;
+          this.previousBlocked = []; this.previousCrowded = [];
+          return this.execObj('status');
+        }
+        const fire = this.idx(a || 'F3CJ');
+        if (fire < 0 || g.nodes[fire].floor < 1 || (g.nodes[fire].kind !== ROOM && g.nodes[fire].kind !== HALL)) {
+          return this.err('Choose an indoor room or hallway for the fire simulation');
+        }
+        this.fireSimulation = true; this.fireSimulationNode = fire;
+        this.previousBlocked.push([fire, g.nodes[fire].blocked]); g.nodes[fire].blocked = true;
+        const floor = g.nodes[fire].floor;
+        for (const stairId of [`F${floor}WS`, `F${floor}ES`]) {
+          const stair = this.idx(stairId);
+          if (stair < 0) continue;
+          this.previousCrowded.push([stair, g.nodes[stair].crowded]); g.nodes[stair].crowded = true;
+        }
+        this.hazardEvents++;
+        return this.execObj('status');
       }
       if (c === 'hazard') {
         const i = this.idx(a); if (i < 0) return this.err('Unknown location');
@@ -451,9 +487,9 @@
         this.root.removeDeep(g.nodes[i].name); g.removeNode(i); this.rebuildIndex(); return { ok: true, msg: 'Room deleted' };
       }
       if (c === 'status') {
-        const bl = [], be = []; g.nodes.forEach((n, i) => { if (n.active && n.blocked) bl.push(i); });
+        const bl = [], crowded = [], be = []; g.nodes.forEach((n, i) => { if (n.active && n.blocked) bl.push(i); if (n.active && n.crowded) crowded.push(i); });
         g.adj.forEach((l, x) => l.forEach(ed => { if (x < ed.to && ed.blocked) be.push([g.nodes[x].id, g.nodes[ed.to].id]); }));
-        return { ok: true, queue: this.sosQ.length, unaccounted: this.people.filter(p => !p.in).map(p => p.name), cutoff: ids(g.cutOff()), blocked: ids(bl), blockedEdges: be };
+        return { ok: true, queue: this.sosQ.length, unaccounted: this.people.filter(p => !p.in).map(p => p.name), cutoff: ids(g.cutOff()), blocked: ids(bl), crowded: ids(crowded), blockedEdges: be, emergency: this.fireSimulation, fireAt: this.fireSimulationNode < 0 ? null : g.nodes[this.fireSimulationNode].id };
       }
       if (c === 'report') {
         const inn = this.people.filter(p => p.in).length;

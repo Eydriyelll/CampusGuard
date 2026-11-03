@@ -32,6 +32,18 @@
       <div class="estimate-note"><span aria-hidden="true">i</span> Demonstration map · distances are estimates</div>
     </section>
 
+    <section id="emergencyAlert" class="emergency-alert" role="alert" aria-live="assertive" hidden>
+      <div>
+        <p class="eyebrow">DEMO EMERGENCY ALERT</p>
+        <strong id="emergencyMessage">A fire emergency is being simulated.</strong>
+        <p class="muted">Practice only—not a live campus alert. Follow staff instructions during a real emergency.</p>
+      </div>
+      <div class="emergency-actions">
+        <button id="bNearestExit" class="btn danger">Nearest available exit</button>
+        <button id="bDismissAlert" class="btn">Dismiss</button>
+      </div>
+    </section>
+
     <nav class="tabs" aria-label="Application sections">
       <button data-tab="route" class="on">Map &amp; routes</button>
       <button data-tab="sos">SOS support</button>
@@ -58,6 +70,7 @@
             <span><i class="sw exit"></i>Exit</span>
             <span><i class="sw route-key"></i>Suggested route</span>
             <span><i class="sw hazard-key"></i>Blocked</span>
+            <span><i class="sw crowd-key"></i>Crowded</span>
           </div>
           <details class="map-layers">
             <summary>Map symbols</summary>
@@ -83,6 +96,11 @@
             <p id="hint" class="hint" aria-live="polite">Tap a room to start planning your route.</p>
             <label>Find a room or location<input id="locationSearch" type="search" placeholder="Room name or ID" autocomplete="off"></label>
             <div id="locationSuggestions" class="location-suggestions"></div>
+            <div class="row">
+              <button id="bGps" class="btn">Check GPS</button>
+              <button id="bEnableAlerts" class="btn">Enable alerts</button>
+            </div>
+            <p id="gpsStatus" class="hint">GPS can’t identify an indoor room. Select your room or hallway on the map.</p>
             <p class="eyebrow recent-heading">RECENT LOCATIONS</p>
             <div id="recentLocations" class="recent-locations"></div>
             <button id="bNextRecent" class="btn wide">Cycle recent locations</button>
@@ -96,9 +114,14 @@
                 <option value="distance">Shortest estimated distance</option>
               </select>
             </label>
+            <label>Destination
+              <select id="routeTarget">
+                <option value="exit">Nearest available fire exit</option>
+                <option value="center">MCL Track Oval assembly point</option>
+              </select>
+            </label>
             <div class="action-stack">
-              <button id="bOval" class="btn primary"><span>Route to assembly point</span><span aria-hidden="true">→</span></button>
-              <button id="bExit" class="btn"><span>Find nearest fire exit</span><span aria-hidden="true">→</span></button>
+              <button id="bRoute" class="btn primary"><span>Show safe route</span><span aria-hidden="true">→</span></button>
               <button id="bRanked" class="btn">Compare exits and assembly point</button>
             </div>
             <div class="facility-grid">
@@ -114,7 +137,20 @@
           </section>
 
           <details class="hazard-tools">
-            <summary>Demo controls <span>Block a place or hallway</span></summary>
+            <summary>Demo controls <span>Simulate hazards and crowding</span></summary>
+            <label>Simulated fire location
+              <select id="fireLocation">
+                <option value="R200">Room 200</option>
+                <option value="R305" selected>Room 305</option>
+                <option value="R405A">Room 405A</option>
+                <option value="R501">Room 501</option>
+              </select>
+            </label>
+            <div class="row">
+              <button id="bSimulate" class="btn danger">Simulate fire</button>
+              <button id="bCrowd" class="btn warn">Report crowding here</button>
+            </div>
+            <p class="hint">Simulation and crowd reports only affect this app instance. No other users receive these updates.</p>
             <div class="row">
               <button id="bHaz" class="btn warn">Block / reopen place</button>
               <button id="bEdge" class="btn warn">Block / reopen hallway</button>
@@ -191,6 +227,16 @@
     <span>For demonstrations and study; follow official campus emergency guidance.</span>
   </footer>
   <div id="toast" class="toast" role="status" aria-live="polite"></div>
+  <dialog id="emergencyDialog" class="emergency-dialog" aria-labelledby="emergencyDialogTitle">
+    <p class="eyebrow">DEMO EMERGENCY ALERT</p>
+    <h2 id="emergencyDialogTitle">Fire simulation active</h2>
+    <p id="emergencyDialogMessage">A fire emergency is being simulated.</p>
+    <p class="muted">Practice only—not a live campus alert. Follow staff instructions during a real emergency.</p>
+    <div class="emergency-actions">
+      <button id="bDialogNearestExit" class="btn danger">Find nearest safe exit</button>
+      <button id="bDialogDismiss" class="btn">Dismiss</button>
+    </div>
+  </dialog>
   <script src="engine.js"></script>
   <script src="app.js"></script>
 </body>

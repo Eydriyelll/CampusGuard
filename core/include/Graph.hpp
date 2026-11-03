@@ -23,6 +23,7 @@ struct MapNode {
     double x;
     double y;
     bool blocked = false;
+    bool crowded = false;
     bool active = true;
     int tags = 0;
 };
@@ -46,7 +47,7 @@ public:
         double x,
         double y
     ) {
-        nodes.push_back({id, name, kind, floor, x, y, false, true});
+        nodes.push_back({id, name, kind, floor, x, y, false, false, true});
         adj.emplace_back();
         return static_cast<int>(nodes.size()) - 1;
     }
@@ -131,7 +132,7 @@ public:
 
             for (const Edge& edge : adj[current]) {
                 const int next = edge.to;
-                if (edge.blocked || nodes[next].blocked || !nodes[next].active) continue;
+                if (edge.blocked || nodes[next].blocked || nodes[next].crowded || !nodes[next].active) continue;
 
                 const int nextLevel = level[current] + 1;
                 const int nextDistance = distance[current] + edge.meters;
@@ -194,7 +195,8 @@ public:
 
             for (const Edge& edge : adj[current.node]) {
                 const int next = edge.to;
-                if (edge.blocked || edge.meters < 0 || nodes[next].blocked || !nodes[next].active) continue;
+                if (edge.blocked || edge.meters < 0 || nodes[next].blocked ||
+                    nodes[next].crowded || !nodes[next].active) continue;
                 if (current.meters > infinity - edge.meters) continue;
 
                 const int nextDistance = current.meters + edge.meters;
@@ -214,7 +216,7 @@ public:
 
         for (size_t i = 0; i < nodes.size(); ++i) {
             const MapNode& node = nodes[i];
-            if (node.active && node.kind == Kind::Exit && !node.blocked) {
+            if (node.active && node.kind == Kind::Exit && !node.blocked && !node.crowded) {
                 visited[i] = 1;
                 pending.push(static_cast<int>(i));
             }
@@ -224,7 +226,8 @@ public:
             const int current = pending.pop();
             for (const Edge& edge : adj[current]) {
                 const int next = edge.to;
-                if (visited[next] || edge.blocked || nodes[next].blocked) continue;
+                if (visited[next] || edge.blocked || nodes[next].blocked ||
+                    nodes[next].crowded) continue;
                 visited[next] = 1;
                 pending.push(next);
             }

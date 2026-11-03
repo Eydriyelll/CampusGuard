@@ -6,7 +6,7 @@ static const char* HELP =
     "CampusGuard CLI - Rizal Building (5 floors) + MCL Track Oval\n"
     "  map | tree | search ID_OR_NAME | suggest PREFIX | recent | nextrecent | oval | ranked ID\n"
     "  route ID exit|center [distance] | route ID to DEST_ID | find ID alarm|extinguisher|hose|refuge|exit|center [distance]\n"
-    "  hazard ID | hazard ID1 ID2 | undo | status\n"
+    "  hazard ID | hazard ID1 ID2 | crowd HALL_ID | simulatefire [INDOOR_ID] | undo | status\n"
     "  sos USER NAME NODE KIND | next | register USER NAME NODE | unregister USER | checkin USER\n"
     "  remember ID | addroom ID NAME FLOOR LINK_ID METERS | delroom ID | report | demo | help | quit\n"
     "  Use underscores for spaces; route defaults to fewest hallway connections.\n"

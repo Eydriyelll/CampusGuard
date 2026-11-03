@@ -3,7 +3,7 @@
 // MODEL (built from the posted Emergency Evacuation Plans, Rizal Building, rev. May 8 2024):
 //   * 5 floors with the REAL room numbers (R200-R214, R301-R314, CR, Faculty, CLIR, R400-R412, labs,
 //     Research Center, Auditorium, R501-R503). The ground-floor plan has no room labels -> placeholders.
-//   * Floors 1-4: long east-west corridor (bays), West/East Stairs, Core Stairs and a diagonal NE wing + NE Stairs.
+//   * Floors 1-4: long east-west corridor (bays), West/East Stairs, Core Stairs, and a diagonal NE wing + NE Stairs.
 //   * Floor 5: loop corridor around the Auditorium, West/Core/NE stairs (NO east stairs), R501-R503 on the east side.
 //   * Only the ground floor touches the outside: Exit West, Exit East, Exit NE Wing.
 //   * Evacuation center / assembly point = the MCL Track Oval, ~270-300 m from the ground-floor exits.
@@ -55,6 +55,10 @@ class Campus {
     std::unordered_map<std::string, int> nameLookup;
     Trie locationTrie;
     size_t baseNodeCount = 0;
+    bool fireSimulation = false;
+    int fireSimulationNode = -1;
+    std::vector<std::pair<int, bool>> previousBlocked;
+    std::vector<std::pair<int, bool>> previousCrowded;
     int ticket = 0, handled = 0, hazardEvents = 0;
 
     static std::string esc(const std::string& s) {
@@ -100,7 +104,9 @@ class Campus {
     }
 
     RouteInfo plan(int from, Kind k, bool shortestDistance = false) const {
-        return planIf(from, [&](int i) { return g.nodes[i].kind == k; }, shortestDistance);
+        return planIf(from, [&](int i) {
+            return g.nodes[i].kind == k && (k != Kind::Exit || !g.nodes[i].crowded);
+        }, shortestDistance);
     }
     template <class F> RouteInfo planIf(int from, F goal, bool shortestDistance = false) const {
         RouteInfo r;
@@ -129,7 +135,9 @@ class Campus {
         for (size_t i = 0; i < g.nodes.size(); ++i) { auto& n = g.nodes[i];
             if (!n.active) { s += sep + "null"; sep = ","; continue; }       // keeps array index == node index
             s += sep + "{\"id\":" + Q(n.id) + ",\"name\":" + Q(n.name) + ",\"k\":" + std::to_string((int)n.kind) + ",\"f\":" + std::to_string(n.floor) +
-                 ",\"x\":" + std::to_string((int)n.x) + ",\"y\":" + std::to_string((int)n.y) + ",\"b\":" + (n.blocked ? "1" : "0") + ",\"t\":" + std::to_string(n.tags) + "}"; sep = ","; }
+                 ",\"x\":" + std::to_string((int)n.x) + ",\"y\":" + std::to_string((int)n.y) +
+                 ",\"b\":" + (n.blocked ? "1" : "0") + ",\"q\":" + (n.crowded ? "1" : "0") +
+                 ",\"t\":" + std::to_string(n.tags) + "}"; sep = ","; }
         sep = "";
         for (size_t a = 0; a < g.adj.size(); ++a) for (auto& ed : g.adj[a]) if ((int)a < ed.to) {
             e += sep + "[" + std::to_string(a) + "," + std::to_string(ed.to) + "," + std::to_string(ed.meters) + "," + (ed.blocked ? "1" : "0") + "]"; sep = ","; }
@@ -165,7 +173,8 @@ class Campus {
         static const int J = 6;                                        // the core/stem joins the corridor at bay 6
         static const Extra X[] = { {3,"CLIR3","CLIR","NW",8,12,8}, {4,"LAB4E","Lab (east)","NW",8,12,10}, {4,"LAB4N","Lab (NE wing)","NS",6,-6,14} };
         const int STAIRS = TAG_FACP | TAG_FE | TAG_HOSE | TAG_FIREEXIT;
-        int WS[FLOORS + 1] = {}, ES[FLOORS + 1] = {}, CS[FLOORS + 1] = {}, NW[FLOORS + 1] = {}, NS[FLOORS + 1] = {};
+        int WS[FLOORS + 1] = {}, ES[FLOORS + 1] = {}, CS[FLOORS + 1] = {},
+            NW[FLOORS + 1] = {}, NS[FLOORS + 1] = {};
 
         for (int f = 1; f <= FLOORS; ++f) {
             const std::string F = "F" + std::to_string(f), L = F + " ";
@@ -211,7 +220,8 @@ class Campus {
             int r = g.addNode(x.id, x.name, Kind::Room, x.floor, g.nodes[l].x + x.dx, g.nodes[l].y + x.dy); g.nodes[r].tags = TAG_FE; g.addEdge(r, l, x.m);
         }
         for (int f = 1; f < FLOORS; ++f) {                             // stairwells connect floors (only where both floors have one)
-            g.addEdge(WS[f], WS[f + 1], STAIR_FLOOR); g.addEdge(CS[f], CS[f + 1], STAIR_FLOOR); g.addEdge(NS[f], NS[f + 1], STAIR_FLOOR);
+            g.addEdge(WS[f], WS[f + 1], STAIR_FLOOR); g.addEdge(CS[f], CS[f + 1], STAIR_FLOOR);
+            g.addEdge(NS[f], NS[f + 1], STAIR_FLOOR);
             if (ES[f] && ES[f + 1]) g.addEdge(ES[f], ES[f + 1], STAIR_FLOOR);
         }
         // ground-floor exits (fire-exit icons on the 1F plan) -> outdoors -> the Oval (assembly point)
@@ -293,6 +303,9 @@ public:
             if (b == "to") {
                 const int destination = idx(d);
                 if (destination < 0) return err("Unknown destination");
+                if (g.nodes[destination].crowded || g.nodes[destination].blocked) {
+                    return err("That destination is blocked or crowded");
+                }
                 return pathJson(planIf(i, [&](int node) { return node == destination; }, true));
             }
             return nearest(i, b == "center" ? Kind::Center : Kind::Exit, d == "distance");
@@ -301,7 +314,9 @@ public:
         if (c == "find") {                                     // find <ID> alarm|extinguisher|hose|refuge|exit|center
             int i = idx(a); if (i < 0) return err("Unknown location");
             const bool shortestDistance = d == "distance";
-            if (b == "exit") return nearest(i, Kind::Exit, shortestDistance);
+            if (b == "exit") return pathJson(planIf(i, [&](int x) {
+                return g.nodes[x].kind == Kind::Exit && !g.nodes[x].crowded;
+            }, shortestDistance));
             if (b == "center") return nearest(i, Kind::Center, shortestDistance);
             int bit = b == "alarm" ? TAG_FACP : b == "extinguisher" ? TAG_FE : b == "hose" ? TAG_HOSE : b == "refuge" ? TAG_REFUGE : 0;
             if (!bit) return err("Usage: find ID alarm|extinguisher|hose|refuge|exit|center");
@@ -332,7 +347,7 @@ public:
             int from = idx(a); if (from < 0) return err("Unknown location");
             MaxHeap<Ranked> ranked;
             for (size_t i = 0; i < g.nodes.size(); ++i)
-                if (g.nodes[i].active && !g.nodes[i].blocked &&
+                if (g.nodes[i].active && !g.nodes[i].blocked && !g.nodes[i].crowded &&
                     (g.nodes[i].kind == Kind::Exit || g.nodes[i].kind == Kind::Center)) {
                     auto p = g.dijkstra(from, [&](int x) { return x == static_cast<int>(i); }); if (p.empty()) continue;
                     int m = 0; for (size_t k = 1; k < p.size(); ++k) m += g.meters(p[k - 1], p[k]);
@@ -342,6 +357,48 @@ public:
             std::reverse(r.begin(), r.end());
             std::string s = "[", sep; for (auto& x : r) { s += sep + "{\"id\":" + Q(g.nodes[x.idx].id) + ",\"meters\":" + std::to_string(x.meters) + "}"; sep = ","; }
             return s + "]"; }
+
+        if (c == "crowd") {
+            const int i = idx(a);
+            if (i < 0) return err("Unknown location");
+            if (g.nodes[i].kind != Kind::Hall && g.nodes[i].kind != Kind::Exit) {
+                return err("Crowding can only be reported at a hallway or exit");
+            }
+            g.nodes[i].crowded = !g.nodes[i].crowded;
+            return exec("status");
+        }
+        if (c == "simulatefire") {
+            if (fireSimulation) {
+                for (const auto& state : previousBlocked) g.nodes[state.first].blocked = state.second;
+                for (const auto& state : previousCrowded) g.nodes[state.first].crowded = state.second;
+                fireSimulation = false;
+                fireSimulationNode = -1;
+                previousBlocked.clear();
+                previousCrowded.clear();
+                return exec("status");
+            }
+
+            const int fire = idx(a.empty() ? "F3CJ" : a);
+            if (fire < 0 || g.nodes[fire].floor < 1 ||
+                (g.nodes[fire].kind != Kind::Room && g.nodes[fire].kind != Kind::Hall)) {
+                return err("Choose an indoor room or hallway for the fire simulation");
+            }
+            fireSimulation = true;
+            fireSimulationNode = fire;
+            previousBlocked.push_back({fire, g.nodes[fire].blocked});
+            g.nodes[fire].blocked = true;
+
+            const int floor = g.nodes[fire].floor;
+            for (const std::string& stairId : {"F" + std::to_string(floor) + "WS",
+                                               "F" + std::to_string(floor) + "ES"}) {
+                const int stair = idx(stairId);
+                if (stair < 0) continue;
+                previousCrowded.push_back({stair, g.nodes[stair].crowded});
+                g.nodes[stair].crowded = true;
+            }
+            ++hazardEvents;
+            return exec("status");
+        }
 
         if (c == "hazard") {                                   // hazard <node>  or  hazard <nodeA> <nodeB> (blocks the hallway between)
             int i = idx(a); if (i < 0) return err("Unknown location");
@@ -389,12 +446,20 @@ public:
 
         if (c == "status") {
             std::vector<int> bl; for (size_t i = 0; i < g.nodes.size(); ++i) if (g.nodes[i].active && g.nodes[i].blocked) bl.push_back((int)i);
+            std::vector<int> crowded;
+            for (size_t i = 0; i < g.nodes.size(); ++i) {
+                if (g.nodes[i].active && g.nodes[i].crowded) crowded.push_back(static_cast<int>(i));
+            }
             std::string un, sep, be, sep2;
             people.forEach([&](Person& p) { if (!p.in) { un += sep + Q(p.name); sep = ","; } });
             for (size_t x = 0; x < g.adj.size(); ++x) for (auto& ed : g.adj[x]) if ((int)x < ed.to && ed.blocked) {
                 be += sep2 + "[" + Q(g.nodes[x].id) + "," + Q(g.nodes[ed.to].id) + "]"; sep2 = ","; }
-            return "{\"ok\":true,\"queue\":" + std::to_string(sosQ.size()) + ",\"unaccounted\":[" + un + "],\"cutoff\":" + list(g.cutOff()) +
-                   ",\"blocked\":" + list(bl) + ",\"blockedEdges\":[" + be + "]}"; }
+            return "{\"ok\":true,\"queue\":" + std::to_string(sosQ.size()) +
+                   ",\"unaccounted\":[" + un + "],\"cutoff\":" + list(g.cutOff()) +
+                   ",\"blocked\":" + list(bl) + ",\"crowded\":" + list(crowded) +
+                   ",\"blockedEdges\":[" + be + "],\"emergency\":" +
+                   (fireSimulation ? "true" : "false") + ",\"fireAt\":" +
+                   (fireSimulationNode < 0 ? "null" : Q(g.nodes[fireSimulationNode].id)) + "}"; }
         if (c == "report") { int in = 0; people.forEach([&](Person& p) { if (p.in) ++in; });
             return "{\"ok\":true,\"sosTotal\":" + std::to_string(ticket) + ",\"handled\":" + std::to_string(handled) + ",\"pending\":" + std::to_string(sosQ.size()) +
                 ",\"people\":" + std::to_string(people.size()) + ",\"checkedIn\":" + std::to_string(in) + ",\"unaccounted\":" + std::to_string(people.size() - in) +

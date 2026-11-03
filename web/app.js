@@ -2,9 +2,9 @@
 (function () {
   const $ = id => document.getElementById(id);
   const KIND = ['room', 'hall', 'exit', 'center'];
-  let MAP = null, ST = { blocked: [], blockedEdges: [], cutoff: [], unaccounted: [], queue: 0 }, floor = 1, sel = null, route = null, edgeFrom = null, lastKind = null, JS = null, layers = 1 | 4 | 8, searchTimer = null;
+  let MAP = null, ST = { blocked: [], blockedEdges: [], crowded: [], cutoff: [], unaccounted: [], queue: 0, emergency: false }, floor = 1, sel = null, route = null, edgeFrom = null, lastKind = null, JS = null, layers = 1 | 4 | 8, searchTimer = null, dismissedEmergency = false, swRegistration = null, compatibilitySimulation = null;
   const idIdx = {};
-  const TITLE = { exit: 'Nearest fire exit', center: 'Route to the Oval (assembly point)', alarm: 'Nearest Fire Alarm Call Point', extinguisher: 'Nearest fire extinguisher', hose: 'Nearest fire hose', refuge: 'Nearest Safe Refuge' };
+  const TITLE = { exit: 'Nearest available fire exit', center: 'Route to the Oval (assembly point)', alarm: 'Nearest Fire Alarm Call Point', extinguisher: 'Nearest fire extinguisher', hose: 'Nearest fire hose', refuge: 'Nearest Safe Refuge' };
   async function cg(cmd) {
     try {
       if (typeof window.cg_exec === 'function') { const r = await window.cg_exec(cmd); return typeof r === 'string' ? JSON.parse(r) : r; }   // C++ engine inside the desktop window
@@ -16,6 +16,10 @@
   function toast(m) { const t = $('toast'); t.textContent = m; t.classList.add('show'); clearTimeout(tt); tt = setTimeout(() => t.classList.remove('show'), 2800); }
   const node = id => MAP.nodes[idIdx[id]];
   const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+  function activateTab(tab) {
+    document.querySelectorAll('.tabs button').forEach(button => button.classList.toggle('on', button.dataset.tab === tab));
+    ['route', 'sos', 'status'].forEach(name => $('p-' + name).hidden = name !== tab);
+  }
 
   function drawFloorPlan(inView) {
     if (floor === 0) {
@@ -57,7 +61,7 @@
   function render() {
     const inView = new Set();
     MAP.nodes.forEach((n, i) => { if (n && (floor === 0 ? (n.f === 0 || n.k === 2) : n.f === floor)) inView.add(i); });
-    const blocked = new Set(ST.blocked), cut = new Set(ST.cutoff), onRoute = new Set(route && route.ok ? route.path : []);
+    const blocked = new Set(ST.blocked), crowded = new Set(ST.crowded || []), cut = new Set(ST.cutoff), onRoute = new Set(route && route.ok ? route.path : []);
     let s = drawFloorPlan(inView);
     MAP.edges.forEach(([a, b, , bl]) => {
       if (!inView.has(a) || !inView.has(b)) return;
@@ -72,9 +76,24 @@
         s += `<polygon class="arrow" points="${mx + ux * 1.8},${my + uy * 1.8} ${mx - ux * 1.1 - uy * 1.3},${my - uy * 1.1 + ux * 1.3} ${mx - ux * 1.1 + uy * 1.3},${my - uy * 1.1 - ux * 1.3}"/>`;
       }
     }
+    if (route && route.ok) for (let k = 0; k + 1 < route.path.length; k++) {
+      const currentIndex = idIdx[route.path[k]], nextIndex = idIdx[route.path[k + 1]];
+      if (currentIndex === undefined || nextIndex === undefined) continue;
+      const current = MAP.nodes[currentIndex], next = MAP.nodes[nextIndex];
+      if (current.f !== floor || next.f === floor) continue;
+      const direction = next.f > current.f ? '\u2191' : '\u2193';
+      const x = current.x >= 75 ? current.x - 9 : current.x + 2;
+      const y = current.y - 7;
+      s += `<g class="route-transfer" aria-label="Continue to floor ${next.f}">
+        <title>Continue to floor ${next.f}</title>
+        <line class="route route-transfer-line" x1="${current.x}" y1="${current.y}" x2="${x + 3.5}" y2="${y + 2.25}"/>
+        <rect class="route-transfer-badge" x="${x}" y="${y}" width="7" height="4.5" rx="1.2"/>
+        <text class="route-transfer-label" x="${x + 3.5}" y="${y + 3.15}" text-anchor="middle">${direction} F${next.f}</text>
+      </g>`;
+    }
     inView.forEach(i => {
       const n = MAP.nodes[i];
-      const cls = ['n', KIND[n.k], blocked.has(n.id) ? 'blk' : '', cut.has(n.id) ? 'cut' : '', onRoute.has(n.id) ? 'onr' : '', sel === i ? 'sel' : ''].join(' ');
+      const cls = ['n', KIND[n.k], blocked.has(n.id) ? 'blk' : '', crowded.has(n.id) ? 'crowded' : '', cut.has(n.id) ? 'cut' : '', onRoute.has(n.id) ? 'onr' : '', sel === i ? 'sel' : ''].join(' ');
       if (n.t & 16) s += `<circle class="fxr" cx="${n.x}" cy="${n.y}" r="3.5"/>`;
       const bd = [[1, '#d42f2f', '!', 'rect'], [2, '#b3261e', 'E', 'dot'], [4, '#8a4b2a', 'H', 'rect'], [8, '#1f6feb', '\u267F', 'rect']].filter(x => (n.t & x[0]) && (layers & x[0]));
       bd.forEach((x, k) => { const bx = n.x + (k - (bd.length - 1) / 2) * 5.2, by = n.y - 8;
@@ -94,7 +113,8 @@
     const has = sel !== null, n = has ? MAP.nodes[sel] : null;
     $('selInfo').innerHTML = has ? `<b>${esc(n.name)}</b> <span class="muted">(${esc(n.id)}, ${n.f === 0 ? 'outdoors' : 'floor ' + n.f})</span>` : 'Nothing selected';
     $('sosLoc').textContent = has ? 'Your location: ' + n.name + ' (' + n.id + ')' : 'Pick your location on the map first.';
-    ['bExit', 'bOval', 'bRanked', 'bHaz', 'bEdge', 'bSos', 'fAlarm', 'fExt', 'fHose', 'fRef'].forEach(id => $(id).disabled = !has);
+    ['bRoute', 'bRanked', 'bCrowd', 'bHaz', 'bEdge', 'bSos', 'fAlarm', 'fExt', 'fHose', 'fRef'].forEach(id => $(id).disabled = !has);
+    $('bCrowd').disabled = !has || (n.k !== 1 && n.k !== 2);
   }
   async function pick(i, remember = true) {
     if (edgeFrom !== null) {
@@ -123,6 +143,164 @@
     const mode = $('routeMode').value === 'distance' ? 'distance' : 'connections';
     showRoute(await cg(`find ${MAP.nodes[sel].id} ${kind} ${mode}`));
   }
+  async function showNearestExit(locationId) {
+    if (locationId && idIdx[locationId] !== undefined) {
+      sel = idIdx[locationId];
+      updateSel();
+    }
+    if (sel === null) {
+      const defaultIndex = idIdx.F3CJ;
+      if (defaultIndex === undefined) return toast('Select your room or hallway on the map first.');
+      sel = defaultIndex;
+      updateSel();
+    }
+    activateTab('route');
+    $('routeTarget').value = 'exit';
+    $('routeMode').value = 'distance';
+    floor = MAP.nodes[sel].f || floor;
+    await go('exit');
+    $('p-route').scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }
+  function simulationIsActive() {
+    return ST.emergency || compatibilitySimulation !== null;
+  }
+  function showEmergencyPopup() {
+    const dialog = $('emergencyDialog');
+    const fireAt = compatibilitySimulation ? compatibilitySimulation.fireAt : ST.fireAt;
+    $('emergencyDialogMessage').textContent = `Simulated fire at ${node(fireAt)?.name || fireAt || 'an indoor location'}. Choose the nearest available safe exit.`;
+    if (!dialog.open) {
+      if (typeof dialog.showModal === 'function') dialog.showModal();
+      else dialog.setAttribute('open', '');
+    }
+  }
+  function closeEmergencyPopup() {
+    const dialog = $('emergencyDialog');
+    if (typeof dialog.close === 'function' && dialog.open) dialog.close();
+    else dialog.removeAttribute('open');
+  }
+  async function beginLegacySimulation(fireAt) {
+    const state = await cg('status');
+    if (!state || state.ok === false) return state || { ok: false, msg: 'Could not load hazard status.' };
+    const fireIndex = idIdx[fireAt];
+    if (fireIndex === undefined) return { ok: false, msg: `Unknown simulated fire location: ${fireAt}` };
+
+    if (!Array.isArray(state.blocked)) return { ok: false, msg: 'The current engine did not provide a blocked-location list; the demo was not started.' };
+    const changed = [];
+    let lastStatus = state;
+    const fireFloor = MAP.nodes[fireIndex].f;
+    const targets = [fireAt, `F${fireFloor}WS`, `F${fireFloor}ES`];
+    for (const id of targets) {
+      if (idIdx[id] === undefined || state.blocked.includes(id)) continue;
+      const result = await cg('hazard ' + id);
+      if (!result || result.ok === false) {
+        const rollbackErrors = [];
+        for (const changedId of [...changed].reverse()) {
+          const rollback = await cg('hazard ' + changedId);
+          if (!rollback || rollback.ok === false) rollbackErrors.push(changedId);
+        }
+        if (rollbackErrors.length) {
+          return { ok: false, msg: `${result?.msg || `Could not mark ${id} for the demo.`} Rollback also failed for: ${rollbackErrors.join(', ')}.` };
+        }
+        return result || { ok: false, msg: `Could not mark ${id} for the demo.` };
+      }
+      changed.push(id);
+      lastStatus = result;
+    }
+
+    compatibilitySimulation = { fireAt, changed, crowded: changed.filter(id => id !== fireAt) };
+    return lastStatus;
+  }
+  async function endLegacySimulation() {
+    const state = await cg('status');
+    if (!state || state.ok === false) return state || { ok: false, msg: 'Could not load hazard status.' };
+    if (!Array.isArray(state.blocked)) return { ok: false, msg: 'The current engine did not provide a blocked-location list; the demo remains active.' };
+    for (const id of [...compatibilitySimulation.changed].reverse()) {
+      if (!state.blocked.includes(id)) continue;
+      const result = await cg('hazard ' + id);
+      if (!result || result.ok === false) return result || { ok: false, msg: `Could not restore ${id}.` };
+    }
+    compatibilitySimulation = null;
+    return cg('status');
+  }
+  async function toggleFireSimulation(fireAt) {
+    if (compatibilitySimulation) return endLegacySimulation();
+
+    const command = simulationIsActive() ? 'simulatefire' : `simulatefire ${fireAt}`;
+    const result = await cg(command);
+    if (result && result.ok !== false) return result;
+    if (!result || !/unknown command/i.test(result.msg || '')) return result;
+    return simulationIsActive() ? result : beginLegacySimulation(fireAt);
+  }
+  async function resumeDemoAndRoute(locationId, fireAt) {
+    if (fireAt && !simulationIsActive()) {
+      const result = await toggleFireSimulation(fireAt);
+      if (result.ok === false) return toast(result.msg);
+      dismissedEmergency = false;
+      await refreshAll();
+      showEmergencyPopup();
+    }
+    await showNearestExit(locationId);
+  }
+  function syncEmergencyAlert() {
+    const emergencyActive = simulationIsActive();
+    const fireAt = compatibilitySimulation ? compatibilitySimulation.fireAt : ST.fireAt;
+    $('emergencyAlert').hidden = !emergencyActive || dismissedEmergency;
+    $('bSimulate').textContent = emergencyActive ? 'End simulation' : 'Simulate fire';
+    if (!emergencyActive) closeEmergencyPopup();
+    if (emergencyActive) {
+      const fireNode = node(fireAt);
+      const crowded = (ST.crowded || []).map(id => node(id)?.name).filter(Boolean);
+      $('emergencyMessage').textContent = `Simulated fire at ${fireNode ? fireNode.name : fireAt}. ${crowded.length ? 'Crowded stairs are excluded from the route.' : ''}`;
+    }
+  }
+  async function enableAlerts() {
+    if (!('Notification' in window)) return toast('Browser notifications are unavailable; in-app demo alerts still work.');
+    if (Notification.permission === 'granted') return toast('Emergency notifications are already enabled.');
+    if (Notification.permission === 'denied') return toast('Notifications are blocked in browser settings; in-app alerts still work.');
+    try {
+      const permission = await Notification.requestPermission();
+      toast(permission === 'granted' ? 'Emergency notifications enabled.' : 'Notification permission was not granted.');
+    } catch (error) {
+      toast(`Could not request notification permission: ${error.message || error}`);
+    }
+  }
+  async function notifyEmergency(userLocationId, fireLocationId) {
+    if (!('Notification' in window) || Notification.permission !== 'granted') return;
+    const options = {
+      body: `Demo only. A simulated fire was reported at ${node(fireLocationId)?.name || fireLocationId}. Tap to find an exit from your selected location.`,
+      tag: 'campusguard-demo-fire',
+      data: { locationId: userLocationId, fireAt: fireLocationId }
+    };
+    try {
+      if (swRegistration) {
+        await swRegistration.showNotification('CampusGuard demo alert', options);
+      } else {
+        const notification = new Notification('CampusGuard demo alert', options);
+        notification.onclick = () => {
+          window.focus();
+          resumeDemoAndRoute(userLocationId, fireLocationId);
+          notification.close();
+        };
+      }
+    } catch (error) {
+      toast(`Could not show browser notification: ${error.message || error}`);
+    }
+  }
+  function checkGps() {
+    if (!navigator.geolocation) return toast('GPS is unavailable in this browser. Select your room or hallway on the map.');
+    $('gpsStatus').textContent = 'Requesting a one-time GPS fix…';
+    navigator.geolocation.getCurrentPosition(
+      position => {
+        $('gpsStatus').textContent = `GPS fix received (about ±${Math.round(position.coords.accuracy)} m). It cannot identify an indoor room; coordinates are not stored or shared. Select your room or hallway on the map.`;
+      },
+      error => {
+        const reason = error.code === error.PERMISSION_DENIED ? 'Permission denied.' :
+          error.code === error.POSITION_UNAVAILABLE ? 'Position unavailable.' : 'GPS request timed out.';
+        $('gpsStatus').textContent = `${reason} Select your room or hallway on the map instead.`;
+      },
+      { enableHighAccuracy: true, timeout: 10000, maximumAge: 30000 }
+    );
+  }
 
   async function loadMap() { MAP = await cg('map'); Object.keys(idIdx).forEach(k => delete idIdx[k]); MAP.nodes.forEach((n, i) => { if (n) idIdx[n.id] = i; }); }
   async function loadRecent() {
@@ -148,14 +326,37 @@
     }</ul></div>`;
   }
   async function loadStatus() {
-    ST = await cg('status'); const nb = ST.blocked.length + ST.blockedEdges.length;
+    const status = await cg('status');
+    if (!status || status.ok === false) return toast(status?.msg || 'Could not load safety status.');
+    ST = {
+      ...status,
+      blocked: status.blocked || [],
+      blockedEdges: status.blockedEdges || [],
+      crowded: status.crowded || [],
+      cutoff: status.cutoff || [],
+      unaccounted: status.unaccounted || [],
+      emergency: status.emergency === true,
+      fireAt: status.fireAt || null
+    };
+    if (compatibilitySimulation) {
+      const fireFloor = MAP.nodes[idIdx[compatibilitySimulation.fireAt]].f;
+      const simulatedCrowds = compatibilitySimulation.crowded;
+      ST.emergency = true;
+      ST.fireAt = compatibilitySimulation.fireAt;
+      ST.crowded = [...new Set([...ST.crowded, ...simulatedCrowds])];
+      ST.blocked = ST.blocked.filter(id => !simulatedCrowds.includes(id));
+    }
+    const nb = ST.blocked.length + ST.blockedEdges.length;
     let h = `<span class="chip ${nb ? 'bad' : 'ok'}">Blocked: ${nb}</span><span class="chip ${ST.cutoff.length ? 'warn' : 'ok'}">Cut off: ${ST.cutoff.length}</span>` +
+            `<span class="chip ${(ST.crowded || []).length ? 'warn' : 'ok'}">Crowded: ${(ST.crowded || []).length}</span>` +
             `<span class="chip">SOS queue: ${ST.queue}</span><span class="chip ${ST.unaccounted.length ? 'warn' : 'ok'}">Unaccounted: ${ST.unaccounted.length}</span>`;
     if (ST.blocked.length) h += `<div class="muted">Blocked places: ${ST.blocked.map(esc).join(', ')}</div>`;
     if (ST.blockedEdges.length) h += `<div class="muted">Blocked hallways: ${ST.blockedEdges.map(e => esc(e[0] + '-' + e[1])).join(', ')}</div>`;
+    if ((ST.crowded || []).length) h += `<div class="muted">Crowded routes: ${ST.crowded.map(esc).join(', ')}</div>`;
     if (ST.cutoff.length) h += `<div class="muted">Cut off from every exit: ${ST.cutoff.map(esc).join(', ')}</div>`;
     if (ST.unaccounted.length) h += `<div class="muted">Not yet checked in: ${ST.unaccounted.map(esc).join(', ')}</div>`;
     $('chips').innerHTML = h;
+    syncEmergencyAlert();
   }
   async function loadOval() {
     const rows = await cg('oval');
@@ -174,10 +375,18 @@
       '<div class="card"><b>In the event of a fire</b><ul class="tips">' + r.fire.map(x => `<li>${esc(x)}</li>`).join('') + '</ul></div>';
   }
   async function refreshAll() {
+    const previousRoute = route;
     await loadMap(); await loadStatus(); await loadOval();
     await loadRecent();
     if (sel !== null && !MAP.nodes[sel]) sel = null;
     if (sel !== null && route && lastKind) await go(lastKind);
+    if (previousRoute?.ok && (lastKind === 'exit' || lastKind === 'center')) {
+      if (route?.ok && previousRoute.exit && route.exit && previousRoute.exit !== route.exit) {
+        toast(`Route updated: ${node(route.exit)?.name || route.exit} is now the safest available exit.`);
+      } else if (!route) {
+        toast('The previous route is no longer available. No safe route was found; stay put and request help.');
+      }
+    }
     updateSel(); render();
   }
 
@@ -216,19 +425,53 @@
       if (index === undefined) return toast('That location is no longer available.');
       pick(index, false);
     };
-    document.querySelectorAll('.tabs button').forEach(b => b.onclick = () => {
-      document.querySelectorAll('.tabs button').forEach(x => x.classList.toggle('on', x === b));
-      ['route', 'sos', 'status'].forEach(t => $('p-' + t).hidden = (t !== b.dataset.tab));
-      if (b.dataset.tab === 'status') { loadStatus(); loadTree(); }
+    document.querySelectorAll('.tabs button').forEach(button => button.onclick = () => {
+      activateTab(button.dataset.tab);
+      if (button.dataset.tab === 'status') { loadStatus(); loadTree(); }
     });
-    $('bExit').onclick = () => go('exit');
-    $('bOval').onclick = () => go('center');
+    $('bRoute').onclick = () => go($('routeTarget').value);
     $('bRanked').onclick = loadRanked;
     $('routeMode').onchange = () => { if (sel !== null && lastKind) go(lastKind); };
+    $('routeTarget').onchange = () => { if (sel !== null) go($('routeTarget').value); };
+    $('bGps').onclick = checkGps;
+    $('bEnableAlerts').onclick = enableAlerts;
+    $('bNearestExit').onclick = () => showNearestExit();
+    $('bDismissAlert').onclick = () => { dismissedEmergency = true; syncEmergencyAlert(); };
+    $('bDialogNearestExit').onclick = async () => {
+      closeEmergencyPopup();
+      await showNearestExit();
+    };
+    $('bDialogDismiss').onclick = closeEmergencyPopup;
+    $('bSimulate').onclick = async () => {
+      const wasActive = simulationIsActive();
+      const previousExit = route?.exit;
+      if (!wasActive && sel === null) return toast('Choose your current room or hallway on the map first.');
+      const fireAt = $('fireLocation').value;
+      const userLocation = sel === null ? null : MAP.nodes[sel].id;
+      const result = await toggleFireSimulation(fireAt);
+      if (!result || result.ok === false) return toast(result?.msg || 'Could not change the fire simulation.');
+      if (!wasActive) dismissedEmergency = false;
+      await refreshAll();
+      if (simulationIsActive() && !wasActive) {
+        showEmergencyPopup();
+        await notifyEmergency(userLocation, ST.fireAt);
+      }
+      if (previousExit && route?.exit && previousExit !== route.exit) {
+        toast(`Route updated: ${node(route.exit)?.name || route.exit} is now the safest available exit.`);
+      } else {
+        toast(simulationIsActive() ? 'Demo fire alert is active.' : 'Fire simulation ended.');
+      }
+    };
     $('fAlarm').onclick = () => go('alarm'); $('fExt').onclick = () => go('extinguisher'); $('fHose').onclick = () => go('hose'); $('fRef').onclick = () => go('refuge');
     document.querySelectorAll('[data-layer]').forEach(cb => cb.onchange = () => { const v = +cb.dataset.layer; layers = cb.checked ? (layers | v) : (layers & ~v); render(); });
     $('bHaz').onclick = async () => { const id = MAP.nodes[sel].id, r = await cg('hazard ' + id); if (r.ok === false) return toast(r.msg);
       toast(r.blocked.includes(id) ? 'Place blocked' : 'Place reopened'); refreshAll(); };
+    $('bCrowd').onclick = async () => {
+      const id = MAP.nodes[sel].id, result = await cg('crowd ' + id);
+      if (result.ok === false) return toast(result.msg);
+      await refreshAll();
+      toast(result.crowded.includes(id) ? 'Crowding reported; route finding will avoid this location.' : 'Crowding report cleared.');
+    };
     $('bEdge').onclick = () => { edgeFrom = sel; $('hint').textContent = 'Now tap the connected place to block/unblock the hallway between them.'; };
     $('bUndo').onclick = async () => { const r = await cg('undo'); toast(r.ok === false ? r.msg : 'Last hazard undone'); refreshAll(); };
     $('bSos').onclick = async () => {
@@ -252,11 +495,25 @@
       $('reportOut').innerHTML = '<div class="grid">' + cell('SOS total', r.sosTotal) + cell('Handled', r.handled) + cell('Pending', r.pending) + cell('People', r.people) +
         cell('Checked in', r.checkedIn) + cell('Unaccounted', r.unaccounted) + cell('Hazard events', r.hazardEvents) + '</div>';
     };
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.addEventListener('message', event => {
+        if (event.data?.type === 'nearest-exit') resumeDemoAndRoute(event.data.locationId, event.data.fireAt);
+      });
+    }
   }
   async function init() {
     for (let i = 0; i < 50 && !(typeof window.cg_exec === 'function' || typeof window.CampusEngine === 'function'); i++) await new Promise(r => setTimeout(r, 100));
     buildFloorTabs(); wire(); await refreshAll(); loadContacts();
-    if ('serviceWorker' in navigator && /^https?:$/.test(location.protocol)) navigator.serviceWorker.register('sw.js').catch(() => {});   // offline support
+    if ('serviceWorker' in navigator && /^https?:$/.test(location.protocol)) {
+      try {
+        swRegistration = await navigator.serviceWorker.register('sw.js');
+      } catch (error) {
+        toast(`Background notifications unavailable: ${error.message || error}`);
+      }
+    }
+    const params = new URLSearchParams(location.search);
+    const nearestExit = params.get('nearestExit'), fireAt = params.get('fireAt');
+    if (nearestExit) await resumeDemoAndRoute(nearestExit, fireAt);
   }
   init();
 })();

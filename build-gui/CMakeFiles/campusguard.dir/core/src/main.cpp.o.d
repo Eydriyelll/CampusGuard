@@ -828,7 +828,11 @@ CMakeFiles/campusguard.dir/core/src/main.cpp.o: \
   /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/usr/include/unistd.h \
   /Users/araos.adriel/Documents/CampusGuard/core/src/../include/Campus.hpp \
   /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/usr/include/c++/v1/sstream \
+  /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/usr/include/c++/v1/unordered_set \
   /Users/araos.adriel/Documents/CampusGuard/core/src/../include/Algorithms.hpp \
   /Users/araos.adriel/Documents/CampusGuard/core/src/../include/Graph.hpp \
   /Users/araos.adriel/Documents/CampusGuard/core/src/../include/ds.hpp \
-  /Users/araos.adriel/Documents/CampusGuard/core/src/../include/Tree.hpp
+  /Users/araos.adriel/Documents/CampusGuard/core/src/../include/Tree.hpp \
+  /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/usr/include/c++/v1/map \
+  /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/usr/include/c++/v1/__tree \
+  /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/usr/include/c++/v1/__utility/lazy_synth_three_way_comparator.h

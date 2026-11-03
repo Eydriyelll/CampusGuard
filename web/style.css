@@ -39,6 +39,17 @@ h1, h2, h3, p { margin-top: 0; }
 .tabs button { min-height: 39px; padding: 8px 16px; border: 0; border-radius: 8px; background: transparent; color: var(--muted); cursor: pointer; font-size: 13px; font-weight: 700; }
 .tabs button.on { background: white; color: var(--green-dark); box-shadow: 0 2px 8px rgb(20 49 35 / 8%); }
 .panel[hidden] { display: none; }
+.emergency-alert { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin: 0 0 16px; padding: 16px 18px; border: 1px solid #e3a8a2; border-radius: 12px; background: #fff0ee; box-shadow: var(--shadow); }
+.emergency-alert[hidden] { display: none; }
+.emergency-alert .eyebrow { color: #a6322c; }
+.emergency-alert p:last-child { margin: 5px 0 0; font-size: 11px; }
+.emergency-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.emergency-dialog { width: min(440px, calc(100% - 32px)); padding: 24px; border: 1px solid #e3a8a2; border-radius: 16px; background: #fff; color: var(--ink); box-shadow: 0 24px 80px rgb(22 52 38 / 28%); }
+.emergency-dialog::backdrop { background: rgb(16 42 36 / 62%); backdrop-filter: blur(2px); }
+.emergency-dialog h2 { margin: 0 0 10px; font-size: 23px; }
+.emergency-dialog p { margin-bottom: 12px; }
+.emergency-dialog .emergency-actions { margin-top: 20px; }
+.emergency-dialog .btn { flex: 1; }
 .workspace { display: grid; grid-template-columns: minmax(0, 1.5fr) minmax(330px, .82fr); align-items: start; gap: 20px; }
 .map-card, .selection-card, .action-card, .distance-card, .content-card, .tree-card { border: 1px solid var(--line); border-radius: 15px; background: var(--paper); box-shadow: var(--shadow); }
 .map-card { min-width: 0; padding: 21px; }
@@ -66,6 +77,9 @@ h1, h2, h3, p { margin-top: 0; }
 .edge.bl { stroke: var(--red); stroke-dasharray: 2 1.5; stroke-width: 1.8; }
 .route { stroke: #148653; stroke-width: 2.2; stroke-linecap: round; }
 .arrow { fill: white; stroke: #0e643d; stroke-width: .5; }
+.route-transfer-line { stroke-width: 1.6; }
+.route-transfer-badge { fill: #148653; stroke: white; stroke-width: .45; pointer-events: none; }
+.route-transfer-label { fill: white; font-size: 1.65px; font-weight: 850; pointer-events: none; }
 .el { display: none; }
 .nl { fill: #304139; font-size: 1.45px; font-weight: 700; text-anchor: middle; pointer-events: none; }
 .n { stroke: white; stroke-width: .5; cursor: pointer; }
@@ -74,6 +88,9 @@ h1, h2, h3, p { margin-top: 0; }
 .n.exit { fill: #138250; }
 .n.center { fill: #d99f24; }
 .n.blk { fill: var(--red); }
+.n.crowded { fill: #d97706; stroke: #8d3c15; stroke-width: 1.5; }
+.stair-marker rect { fill: #e6efe6; stroke: #597365; stroke-width: .45; }
+.stair-marker text { fill: #365044; font-size: 1.45px; font-weight: 800; pointer-events: none; }
 .n.cut { stroke: #e59a36; stroke-width: 1.7; }
 .n.sel { stroke: #14281e; stroke-width: 1.8; }
 .n.onr { stroke: #0b5734; stroke-width: 1.8; }
@@ -88,6 +105,7 @@ h1, h2, h3, p { margin-top: 0; }
 .sw.exit { border-radius: 50%; background: #138250; }
 .sw.route-key { width: 18px; min-width: 18px; height: 4px; border-radius: 4px; background: #148653; }
 .sw.hazard-key { border-radius: 50%; background: var(--red); }
+.sw.crowd-key { border-radius: 50%; background: #d97706; }
 .sw.alarm { background: #c8463c; }
 .sw.ext { border-radius: 50%; background: #aa4937; }
 .sw.hose { background: #8a6040; }
@@ -112,6 +130,7 @@ h1, h2, h3, p { margin-top: 0; }
 .recent-locations + .btn { margin-top: 8px; }
 .action-card h3, .distance-card h3 { margin: 0 0 10px; font-size: 15px; }
 .action-card > label { margin: 10px 0; }
+.selection-card .row { margin-bottom: 4px; }
 .action-stack { display: grid; gap: 8px; }
 .btn { display: inline-flex; min-height: 40px; align-items: center; justify-content: center; gap: 8px; padding: 9px 12px; border: 1px solid var(--line); border-radius: 8px; background: #fff; color: #34443b; cursor: pointer; font-size: 12px; font-weight: 750; transition: background .15s, border-color .15s, transform .15s; }
 .btn:hover:not(:disabled) { border-color: #9cafa2; background: #f7faf7; }
@@ -141,6 +160,7 @@ h1, h2, h3, p { margin-top: 0; }
 .hazard-tools { padding: 0 14px; border: 1px solid var(--line); border-radius: 11px; background: #fff; }
 .hazard-tools summary span { margin-left: 6px; color: #8a948e; font-size: 10px; font-weight: 500; }
 .hazard-tools .row { padding: 3px 0 12px; }
+.hazard-tools > .hint { padding-bottom: 10px; }
 .distance-card table { overflow: hidden; border: 1px solid var(--line); border-radius: 8px; background: #fff; font-size: 10px; }
 table { width: 100%; border-collapse: collapse; }
 th, td { padding: 6px 7px; border-bottom: 1px solid var(--line); text-align: left; }
@@ -207,6 +227,8 @@ footer { display: flex; justify-content: space-between; gap: 20px; max-width: 12
   .tabs { gap: 2px; margin-bottom: 12px; padding: 4px; overflow-x: auto; }
   .tabs button { flex: 1 0 auto; padding: 7px 10px; font-size: 11px; }
   .workspace { grid-template-columns: 1fr; }
+  .emergency-alert { align-items: stretch; flex-direction: column; padding: 13px; }
+  .emergency-actions { display: grid; }
   .map-card { padding: 13px; }
   #map { aspect-ratio: 1.08 / 1; }
   .route-tools { grid-template-columns: 1fr; }
